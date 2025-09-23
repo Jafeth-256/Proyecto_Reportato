@@ -46,7 +46,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("http://18.219.64.19:3001/login", {
+      const response = await fetch(`${API_BASE_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginData),
@@ -128,7 +128,7 @@ const Login = () => {
 
     try {
       const response = await fetch(
-        `http://18.219.64.19:3001/usuarios/${currentUser.id}/cambiar-contrasena`,
+        `${API_BASE_URL}/usuarios/${currentUser.id}/cambiar-contrasena`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
