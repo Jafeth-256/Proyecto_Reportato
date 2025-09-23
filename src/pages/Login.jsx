@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import "../styles/custom.css";
 import CustomAlert from "../components/CustomAlert";
 import { useAuth } from "../components/AuthContext";
+import API_BASE_URL from '../config/api';
 
 const Login = () => {
   const { login } = useAuth();
@@ -45,7 +46,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3001/login", {
+      const response = await fetch("http://18.219.64.19:3001/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginData),
@@ -127,7 +128,7 @@ const Login = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:3001/usuarios/${currentUser.id}/cambiar-contrasena`,
+        `http://18.219.64.19:3001/usuarios/${currentUser.id}/cambiar-contrasena`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
