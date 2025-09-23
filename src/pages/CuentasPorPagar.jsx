@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const CuentasPorPagar = () => {
   const { generateCuentasPorPagarReport, isGenerating } = useReports();
@@ -40,7 +41,7 @@ const CuentasPorPagar = () => {
 
   const fetchProveedores = async () => {
     try {
-      const response = await fetch('http://localhost:3001/proveedores');
+      const response = await fetch(`${API_BASE_URL}/proveedores`);
       if (response.ok) {
         const data = await response.json();
         setProveedores(data);
@@ -55,7 +56,7 @@ const CuentasPorPagar = () => {
   const fetchFacturas = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/facturas-proveedores');
+      const response = await fetch(`${API_BASE_URL}/facturas-proveedores`);
       if (response.ok) {
         const data = await response.json();
         setFacturas(data);
@@ -100,8 +101,8 @@ const CuentasPorPagar = () => {
     
     try {
       const url = editingFactura 
-        ? `http://localhost:3001/facturas-proveedores/${editingFactura.id}`
-        : 'http://localhost:3001/facturas-proveedores';
+      ? `${API_BASE_URL}/facturas-proveedores/${editingFactura.id}`
+      : `${API_BASE_URL}/facturas-proveedores`;
       
       const method = editingFactura ? 'PUT' : 'POST';
       
@@ -133,7 +134,7 @@ const CuentasPorPagar = () => {
     e.preventDefault();
     
     try {
-      const response = await fetch('http://localhost:3001/abonos-proveedores', {
+      const response = await fetch(`${API_BASE_URL}/abonos-proveedores`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,7 +192,7 @@ const CuentasPorPagar = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Está seguro de que desea eliminar esta factura?')) {
       try {
-        const response = await fetch(`http://localhost:3001/facturas-proveedores/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/facturas-proveedores/${id}`, {
           method: 'DELETE',
         });
 
@@ -247,7 +248,7 @@ const CuentasPorPagar = () => {
     const fecha_fin = lastDay.toISOString().split('T')[0];
 
     try {
-      const response = await fetch(`http://localhost:3001/reportes/deuda-proveedor-semanal?proveedor_id=${reportProveedor}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`);
+      const response = await fetch(`${API_BASE_URL}/reportes/deuda-proveedor-semanal?proveedor_id=${reportProveedor}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`);
       if (response.ok) {
         const data = await response.json();
         setReportData(data);

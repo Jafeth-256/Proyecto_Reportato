@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
+import API_BASE_URL from '../config/api';
 
 const Sucursales = () => {
   const [sucursales, setSucursales] = useState([]);
@@ -34,7 +35,7 @@ const Sucursales = () => {
   const fetchSucursales = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/sucursales');
+      const response = await fetch(`${API_BASE_URL}/sucursales`);
       if (response.ok) {
         const data = await response.json();
         setSucursales(data);
@@ -75,8 +76,8 @@ const Sucursales = () => {
     
     try {
       const url = editingItem 
-        ? `http://localhost:3001/sucursales/${editingItem.id}`
-        : 'http://localhost:3001/sucursales';
+      ? `${API_BASE_URL}/sucursales/${editingItem.id}`
+      : `${API_BASE_URL}/sucursales`;
       
       const method = editingItem ? 'PUT' : 'POST';
       
@@ -124,7 +125,7 @@ const Sucursales = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar esta sucursal?')) {
       try {
-        const response = await fetch(`http://localhost:3001/sucursales/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/sucursales/${id}`, {
           method: 'DELETE',
         });
 
@@ -143,7 +144,7 @@ const Sucursales = () => {
     const newStatus = currentStatus === 'activa' ? 'inactiva' : 'activa';
     
     try {
-      const response = await fetch(`http://localhost:3001/sucursales/${id}/estado`, {
+      const response = await fetch(`${API_BASE_URL}/sucursales/${id}/estado`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

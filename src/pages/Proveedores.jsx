@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const Proveedores = () => {
   const { generateSupplierReport, isGenerating } = useReports();
@@ -36,7 +37,7 @@ const Proveedores = () => {
   const fetchProveedores = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/proveedores');
+      const response = await fetch(`${API_BASE_URL}/proveedores`);
       if (response.ok) {
         const data = await response.json();
         setProveedores(data);
@@ -52,7 +53,7 @@ const Proveedores = () => {
 
   const fetchProductos = async () => {
     try {
-      const response = await fetch('http://localhost:3001/productos/activos');
+      const response = await fetch(`${API_BASE_URL}/productos/activos`);
       if (response.ok) {
         const data = await response.json();
         setProductos(data);
@@ -96,8 +97,8 @@ const Proveedores = () => {
     
     try {
       const url = editingProveedor 
-        ? `http://localhost:3001/proveedores/${editingProveedor.id}`
-        : 'http://localhost:3001/proveedores';
+      ? `${API_BASE_URL}/proveedores/${editingProveedor.id}`
+      : `${API_BASE_URL}/proveedores`;
       
       const method = editingProveedor ? 'PUT' : 'POST';
       
@@ -155,7 +156,7 @@ const Proveedores = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este proveedor?')) {
       try {
-        const response = await fetch(`http://localhost:3001/proveedores/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/proveedores/${id}`, {
           method: 'DELETE',
         });
 

@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const Clientes = () => {
   const { generateClientReport, isGenerating } = useReports();
@@ -31,7 +32,7 @@ const Clientes = () => {
   const fetchClientes = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/clientes');
+      const response = await fetch(`${API_BASE_URL}/clientes`);
       if (response.ok) {
         const data = await response.json();
         setClientes(data);
@@ -73,8 +74,8 @@ const Clientes = () => {
     
     try {
       const url = editingCliente 
-        ? `http://localhost:3001/clientes/${editingCliente.id}`
-        : 'http://localhost:3001/clientes';
+      ? `${API_BASE_URL}/clientes/${editingCliente.id}`
+      : `${API_BASE_URL}/clientes`;
       
       const method = editingCliente ? 'PUT' : 'POST';
       
@@ -128,7 +129,7 @@ const Clientes = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este cliente?')) {
       try {
-        const response = await fetch(`http://localhost:3001/clientes/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/clientes/${id}`, {
           method: 'DELETE',
         });
 

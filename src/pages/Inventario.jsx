@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const Inventario = () => {
   const [inventario, setInventario] = useState([]);
@@ -34,7 +35,7 @@ const Inventario = () => {
   const fetchInventario = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/inventario');
+      const response = await fetch(`${API_BASE_URL}/inventario`);
       if (response.ok) {
         const data = await response.json();
         setInventario(data);
@@ -50,7 +51,7 @@ const Inventario = () => {
 
   const fetchProductos = async () => {
     try {
-      const response = await fetch('http://localhost:3001/productos/activos');
+      const response = await fetch(`${API_BASE_URL}/productos/activos`);
       if (response.ok) {
         const data = await response.json();
         setProductos(data);
@@ -92,8 +93,8 @@ const Inventario = () => {
 
     try {
       const url = editingItem
-        ? `http://localhost:3001/inventario/${editingItem.id}`
-        : 'http://localhost:3001/inventario';
+      ? `${API_BASE_URL}/inventario/${editingItem.id}`
+      : `${API_BASE_URL}/inventario`;
 
       const method = editingItem ? 'PUT' : 'POST';
 
@@ -147,7 +148,7 @@ const Inventario = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este registro de inventario?')) {
       try {
-        const response = await fetch(`http://localhost:3001/inventario/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/inventario/${id}`, {
           method: 'DELETE',
         });
 

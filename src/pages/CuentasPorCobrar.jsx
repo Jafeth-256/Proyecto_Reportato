@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const CuentasPorCobrar = () => {
   const { generateCuentasPorCobrarReport, isGenerating } = useReports();
@@ -40,7 +41,7 @@ const CuentasPorCobrar = () => {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch('http://localhost:3001/clientes');
+      const response = await fetch(`${API_BASE_URL}/clientes`);
       if (response.ok) {
         const data = await response.json();
         setClientes(data);
@@ -55,7 +56,7 @@ const CuentasPorCobrar = () => {
   const fetchFacturas = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/facturas-clientes');
+      const response = await fetch(`${API_BASE_URL}/facturas-clientes`);
       if (response.ok) {
         const data = await response.json();
         setFacturas(data);
@@ -100,8 +101,8 @@ const CuentasPorCobrar = () => {
     
     try {
       const url = editingFactura 
-        ? `http://localhost:3001/facturas-clientes/${editingFactura.id}`
-        : 'http://localhost:3001/facturas-clientes';
+      ? `${API_BASE_URL}/facturas-clientes/${editingFactura.id}`
+      : `${API_BASE_URL}/facturas-clientes`;
       
       const method = editingFactura ? 'PUT' : 'POST';
       
@@ -133,7 +134,7 @@ const CuentasPorCobrar = () => {
     e.preventDefault();
     
     try {
-      const response = await fetch('http://localhost:3001/abonos-clientes', {
+      const response = await fetch(`${API_BASE_URL}/abonos-clientes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,7 +192,7 @@ const CuentasPorCobrar = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar esta factura?')) {
       try {
-        const response = await fetch(`http://localhost:3001/facturas-clientes/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/facturas-clientes/${id}`, {
           method: 'DELETE',
         });
 
@@ -239,7 +240,7 @@ const CuentasPorCobrar = () => {
     const fecha_fin = lastDay.toISOString().split('T')[0];
 
     try {
-      const response = await fetch(`http://localhost:3001/reportes/deuda-cliente-semanal?cliente_id=${reportCliente}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`);
+      const response = await fetch(`${API_BASE_URL}/reportes/deuda-cliente-semanal?cliente_id=${reportCliente}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`);
       if (response.ok) {
         const data = await response.json();
         setReportData(data);

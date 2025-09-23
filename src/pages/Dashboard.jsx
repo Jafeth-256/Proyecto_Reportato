@@ -5,6 +5,7 @@ import SalesByDayChart from '../components/SalesByDayChart';
 import PaymentMethodChart from '../components/PaymentMethodChart';
 import StockChart from '../components/StockChart';
 
+
 const Dashboard = () => {
   const [branches, setBranches] = useState([]);
   const [stats, setStats] = useState([]);

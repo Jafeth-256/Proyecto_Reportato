@@ -495,7 +495,7 @@ app.get('/inventario', async (req, res) => {
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
-
+checkpoint
 app.post('/inventario', async (req, res) => {
   try {
     const { producto_id, stock_actual, stock_minimo, precio_unitario, fecha_ingreso, fecha_vencimiento, estado } = req.body;
@@ -1017,7 +1017,7 @@ app.post('/facturas-proveedores', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
-
+checkpoint
 app.post('/abonos-proveedores', async (req, res) => {
   const connection = await pool.getConnection();
   try {

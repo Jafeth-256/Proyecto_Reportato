@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const VentasDiarias = () => {
   const [ventas, setVentas] = useState([]);
@@ -46,7 +47,7 @@ const handleGenerateWeeklyBySucursal = async () => {
   const fetchVentas = async () => {
     try {
       setLoading(true);
-      let url = 'http://localhost:3001/ventas-diarias';
+      let url = `${API_BASE_URL}/ventas-diarias`;
       const params = new URLSearchParams();
 
       if (filtroFecha) {
@@ -77,7 +78,7 @@ const handleGenerateWeeklyBySucursal = async () => {
 
   const fetchSucursales = async () => {
     try {
-      const response = await fetch('http://localhost:3001/sucursales/activas');
+      const response = await fetch(`${API_BASE_URL}/sucursales/activas`);
       if (response.ok) {
         const data = await response.json();
         setSucursales(data);
@@ -91,7 +92,7 @@ const handleGenerateWeeklyBySucursal = async () => {
 
   const fetchEstadisticas = async () => {
     try {
-      let url = 'http://localhost:3001/ventas-diarias/estadisticas';
+      let url = `${API_BASE_URL}/ventas-diarias/estadisticas`;
       const params = new URLSearchParams();
 
       if (filtroFecha) {
@@ -240,8 +241,8 @@ const handleGenerateWeeklyBySucursal = async () => {
 
     try {
       const url = editingItem
-        ? `http://localhost:3001/ventas-diarias/${editingItem.id}`
-        : 'http://localhost:3001/ventas-diarias';
+    ? `${API_BASE_URL}/ventas-diarias/${editingItem.id}`
+    : `${API_BASE_URL}/ventas-diarias`;
 
       const method = editingItem ? 'PUT' : 'POST';
 
@@ -298,7 +299,7 @@ const handleGenerateWeeklyBySucursal = async () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este registro de venta?')) {
       try {
-        const response = await fetch(`http://localhost:3001/ventas-diarias/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/ventas-diarias/${id}`, {
           method: 'DELETE',
         });
 
@@ -316,7 +317,7 @@ const handleGenerateWeeklyBySucursal = async () => {
 
   const handleChangeStatus = async (id, newStatus) => {
     try {
-      const response = await fetch(`http://localhost:3001/ventas-diarias/${id}/estado`, {
+      const response = await fetch(`${API_BASE_URL}/ventas-diarias/${id}/estado`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

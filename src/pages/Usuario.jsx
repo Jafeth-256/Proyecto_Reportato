@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import "../styles/custom.css";
 import CustomAlert from "../components/CustomAlert";
 import { permisos } from "../permisos";
+import API_BASE_URL from '../config/api';
 
 const Usuario = () => {
   const [usuarios, setUsuarios] = useState([]);
@@ -42,7 +43,7 @@ const Usuario = () => {
   const fetchUsuarios = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:3001/usuarios");
+      const response = await fetch(`${API_BASE_URL}/usuarios`);
       if (!response.ok) {
         throw new Error(`Error: ${response.status}`);
       }
@@ -87,8 +88,8 @@ const Usuario = () => {
     e.preventDefault();
     const method = editingUsuario ? "PUT" : "POST";
     const url = editingUsuario
-      ? `http://localhost:3001/usuarios/${editingUsuario.id}`
-      : "http://localhost:3001/usuarios";
+    ? `${API_BASE_URL}/usuarios/${editingUsuario.id}`
+    : `${API_BASE_URL}/usuarios`;
 
     try {
       const response = await fetch(url, {
@@ -156,7 +157,7 @@ const Usuario = () => {
   const handleDelete = async (id) => {
     if (window.confirm("¿Deseas eliminar este usuario?")) {
       try {
-        const response = await fetch(`http://localhost:3001/usuarios/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/usuarios/${id}`, {
           method: "DELETE",
         });
         if (response.ok) {

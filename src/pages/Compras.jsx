@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
+import API_BASE_URL from '../config/api';
 
 const Compras = () => {
     const [compras, setCompras] = useState([]);
@@ -45,7 +46,7 @@ const Compras = () => {
 
             // Opción 2: Desde una API de sesión
             try {
-                const response = await fetch('http://localhost:3001/auth/me', {
+                const response = await fetch(`${API_BASE_URL}/auth/me`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     }
@@ -77,7 +78,7 @@ const Compras = () => {
     const fetchCompras = async () => {
         try {
             setLoading(true);
-            const response = await fetch('http://localhost:3001/compras');
+            const response = await fetch(`${API_BASE_URL}/compras`);
             if (response.ok) {
                 const data = await response.json();
                 setCompras(data);
@@ -93,7 +94,7 @@ const Compras = () => {
 
     const fetchProductos = async () => {
         try {
-            const response = await fetch('http://localhost:3001/productos/activos');
+            const response = await fetch(`${API_BASE_URL}/productos/activos`);
             if (response.ok) {
                 const data = await response.json();
                 setProductos(data);
@@ -107,7 +108,7 @@ const Compras = () => {
 
     const fetchProveedores = async () => {
         try {
-            const response = await fetch('http://localhost:3001/proveedores');
+            const response = await fetch(`${API_BASE_URL}/proveedores`);
             if (response.ok) {
                 const data = await response.json();
                 setProveedores(data);
@@ -193,8 +194,8 @@ const Compras = () => {
             console.log('Datos a enviar:', submitData);
 
             const url = editingCompra
-                ? `http://localhost:3001/compras/${editingCompra.id}`
-                : 'http://localhost:3001/compras';
+            ? `${API_BASE_URL}/compras/${editingCompra.id}`
+            : `${API_BASE_URL}/compras`;
             
             const method = editingCompra ? 'PUT' : 'POST';
             
@@ -250,7 +251,7 @@ const Compras = () => {
     const handleDelete = async (id) => {
         if (window.confirm('¿Estás seguro de que deseas eliminar esta compra?')) {
             try {
-                const response = await fetch(`http://localhost:3001/compras/${id}`, {
+                const response = await fetch(`${API_BASE_URL}/compras/${id}`, {
                     method: 'DELETE',
                 });
 

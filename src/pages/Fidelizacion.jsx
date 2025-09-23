@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
+import API_BASE_URL from '../config/api';
 
 const Fidelizacion = () => {
   const [fidelizacion, setFidelizacion] = useState([]);
@@ -26,7 +27,7 @@ const Fidelizacion = () => {
     const fetchFidelizacion = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:3001/fidelizacion');
+        const response = await fetch(`${API_BASE_URL}/fidelizacion`);
         if (response.ok) {
           const data = await response.json();
           setFidelizacion(data);
@@ -72,8 +73,8 @@ const Fidelizacion = () => {
 
   try {
       const url = editingFidelizacion 
-        ? `http://localhost:3001/fidelizacion/${editingFidelizacion.id}`
-        : 'http://localhost:3001/fidelizacion';
+      ? `${API_BASE_URL}/fidelizacion/${editingFidelizacion.id}`
+      : `${API_BASE_URL}/fidelizacion`;
       
       const method = editingFidelizacion ? 'PUT' : 'POST';
       
@@ -121,7 +122,7 @@ const Fidelizacion = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
       try {
-        const response = await fetch(`http://localhost:3001/fidelizacion/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/fidelizacion/${id}`, {
           method: 'DELETE',
         });
 
@@ -143,7 +144,7 @@ const Fidelizacion = () => {
     const updatedItem = { ...itemToUpdate, categoria: newStatus };
 
     try {
-      const response = await fetch(`http://localhost:3001/fidelizacion/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/fidelizacion/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

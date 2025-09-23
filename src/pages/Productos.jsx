@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
+import API_BASE_URL from '../config/api';
 
 const Productos = () => {
   const { generateProductReport, isGenerating } = useReports();
@@ -30,7 +31,7 @@ const Productos = () => {
   const fetchProductos = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/productos');
+      const response = await fetch(`${API_BASE_URL}/productos`);
       if (response.ok) {
         const data = await response.json();
         setProductos(data);
@@ -74,8 +75,8 @@ const Productos = () => {
     
     try {
       const url = editingProducto 
-        ? `http://localhost:3001/productos/${editingProducto.id}`
-        : 'http://localhost:3001/productos';
+      ? `${API_BASE_URL}/productos/${editingProducto.id}`
+      : `${API_BASE_URL}/productos`;
       
       const method = editingProducto ? 'PUT' : 'POST';
       
@@ -125,7 +126,7 @@ const Productos = () => {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este producto?')) {
       try {
-        const response = await fetch(`http://localhost:3001/productos/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/productos/${id}`, {
           method: 'DELETE',
         });
 
