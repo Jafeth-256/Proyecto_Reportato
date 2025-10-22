@@ -307,41 +307,233 @@ class ReportService {
   return this.doc;
 }
 
-generateInventoryReport(inventory, filters = {}) {
-    this.initDocument();
+generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
+  this.initDocument();
 
-    // Header
-    this.addHeader('REPORTE DE INVENTARIO', 'Estado actual del inventario', filters);
+  // Header
+  const subtitle = includeZeroStock 
+    ? 'Estado actual del inventario (incluyendo productos sin stock)' 
+    : 'Estado actual del inventario';
+  this.addHeader('REPORTE DE INVENTARIO', subtitle, filters);
 
-    // Verify if there is inventory
-    if (!inventory || inventory.length === 0) {
-      this.doc.setFontSize(12);
-      this.doc.setTextColor(this.colors.secondary);
-      this.doc.text('No se encontraron registros de inventario.', 20, this.currentY);
-      this.addFooter();
-      return this.doc;
-    }
+  // Verify if there is inventory
+  if (!inventory || inventory.length === 0) {
+    this.doc.setFontSize(12);
+    this.doc.setTextColor(this.colors.secondary);
+    this.doc.text('No se encontraron registros de inventario.', 20, this.currentY);
+    this.addFooter();
+    return this.doc;
+  }
 
-    // Inventory table
-    this.doc.setFontSize(14);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.setTextColor(this.colors.dark);
-    this.doc.text('Detalle de Inventario', 20, this.currentY);
-    this.currentY += 8;
+  // Estadísticas adicionales
+  const totalProductos = inventory.length;
+  const productosConStock = inventory.filter(i => i.stock_actual > 0).length;
+  const productosSinStock = inventory.filter(i => i.stock_actual === 0).length;
+  const productosStockBajo = inventory.filter(i => i.stock_actual > 0 && i.stock_actual <= i.stock_minimo).length;
 
-    const tableData = inventory.map(i => [
+  // Resumen de estadísticas
+  this.doc.setFontSize(12);
+  this.doc.setFont('helvetica', 'bold');
+  this.doc.setTextColor(this.colors.dark);
+  this.doc.text('Resumen de Inventario', 20, this.currentY);
+  this.currentY += 8;
+
+  const statsData = [
+    ['Concepto', 'Cantidad'],
+    ['Total de Productos', totalProductos.toString()],
+    ['Productos con Stock', productosConStock.toString()],
+    ['Productos sin Stock', productosSinStock.toString()],
+    ['Productos Stock Bajo', productosStockBajo.toString()]
+  ];
+
+  autoTable(this.doc, {
+    head: [statsData[0]],
+    body: statsData.slice(1),
+    startY: this.currentY,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [46, 125, 50],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [33, 37, 41]
+    },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { halign: 'center', fontStyle: 'bold' }
+    },
+    margin: { left: 20, right: 20 }
+  });
+
+  this.currentY = this.doc.lastAutoTable.finalY + 12;
+
+  // Inventory table
+  this.doc.setFontSize(14);
+  this.doc.setFont('helvetica', 'bold');
+  this.doc.setTextColor(this.colors.dark);
+  this.doc.text('Detalle de Inventario', 20, this.currentY);
+  this.currentY += 8;
+
+  const tableData = inventory.map(i => {
+    const stockActual = i.stock_actual === 0 ? '0 ⚠' : i.stock_actual.toString();
+    return [
       i.nombre_producto,
       i.categoria,
-      i.stock_actual,
+      stockActual,
       i.stock_minimo,
       this.formatCurrency(i.precio_unitario),
       this.formatDate(i.fecha_ingreso),
       i.fecha_vencimiento ? this.formatDate(i.fecha_vencimiento) : 'N/A',
       this.capitalizeFirst(i.estado)
-    ]);
+    ];
+  });
 
+  autoTable(this.doc, {
+    head: [['Producto', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'Precio Unitario', 'Fecha Ingreso', 'Fecha Venc.', 'Estado']],
+    body: tableData,
+    startY: this.currentY,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [46, 125, 50],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [33, 37, 41]
+    },
+    styles: {
+      overflow: 'linebreak',
+      cellPadding: 2
+    },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 'auto' },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+      5: { cellWidth: 'wrap' },
+      6: { cellWidth: 'wrap' },
+      7: { halign: 'center' }
+    },
+    margin: { left: 20, right: 20 },
+    alternateRowStyles: {
+      fillColor: [248, 249, 250]
+    },
+    didParseCell: function(data) {
+      // Destacar productos sin stock
+      if (data.section === 'body' && data.column.index === 2) {
+        const stockValue = inventory[data.row.index].stock_actual;
+        if (stockValue === 0) {
+          data.cell.styles.textColor = [244, 67, 54]; // Rojo
+          data.cell.styles.fontStyle = 'bold';
+        } else if (stockValue <= inventory[data.row.index].stock_minimo) {
+          data.cell.styles.textColor = [255, 152, 0]; // Naranja
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+      // Destacar estado
+      if (data.section === 'body' && data.column.index === 7) {
+        const estado = inventory[data.row.index].estado;
+        if (estado === 'Agotado') {
+          data.cell.styles.fillColor = [255, 235, 238];
+          data.cell.styles.textColor = [244, 67, 54];
+          data.cell.styles.fontStyle = 'bold';
+        } else if (estado === 'Stock Bajo') {
+          data.cell.styles.fillColor = [255, 243, 224];
+          data.cell.styles.textColor = [255, 152, 0];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    }
+  });
+
+  this.addFooter();
+  return this.doc;
+}
+
+  generateClientReport(clients, filters = {}, includeInactive = false) {
+    this.initDocument();
+  
+    const subtitle = includeInactive 
+      ? 'Listado completo de clientes (incluyendo inactivos)' 
+      : 'Listado de clientes activos';
+    this.addHeader('REPORTE DE CLIENTES', subtitle, filters);
+  
+    if (!clients || clients.length === 0) {
+      this.doc.setFontSize(12);
+      this.doc.setTextColor(this.colors.secondary);
+      this.doc.text('No se encontraron registros de clientes.', 20, this.currentY);
+      this.addFooter();
+      return this.doc;
+    }
+  
+    // Estadísticas
+    const totalClientes = clients.length;
+    const clientesActivos = clients.filter(c => c.estado === 'Activo').length;
+    const clientesInactivos = clients.filter(c => c.estado === 'Inactivo').length;
+  
+    this.doc.setFontSize(12);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text('Resumen de Clientes', 20, this.currentY);
+    this.currentY += 8;
+  
+    const statsData = [
+      ['Concepto', 'Cantidad'],
+      ['Total de Clientes', totalClientes.toString()],
+      ['Clientes Activos', clientesActivos.toString()],
+      ['Clientes Inactivos', clientesInactivos.toString()]
+    ];
+  
     autoTable(this.doc, {
-      head: [['Producto', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'Precio Unitario', 'Fecha Ingreso', 'Fecha Venc.', 'Estado']],
+      head: [statsData[0]],
+      body: statsData.slice(1),
+      startY: this.currentY,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [46, 125, 50],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [33, 37, 41]
+      },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { halign: 'center', fontStyle: 'bold' }
+      },
+      margin: { left: 20, right: 20 }
+    });
+  
+    this.currentY = this.doc.lastAutoTable.finalY + 12;
+  
+    // Tabla de clientes
+    this.doc.setFontSize(14);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text('Detalle de Clientes', 20, this.currentY);
+    this.currentY += 8;
+  
+    const tableData = clients.map(c => [
+      c.nombre,
+      c.empresa || 'N/A',
+      c.telefono || 'N/A',
+      c.email || 'N/A',
+      c.ciudad || 'N/A',
+      c.direccion || 'N/A',
+      this.formatDate(c.fecha_registro),
+      this.capitalizeFirst(c.estado)
+    ]);
+  
+    autoTable(this.doc, {
+      head: [['Nombre', 'Empresa', 'Teléfono', 'Email', 'Ciudad', 'Dirección', 'Registro', 'Estado']],
       body: tableData,
       startY: this.currentY,
       theme: 'striped',
@@ -362,9 +554,9 @@ generateInventoryReport(inventory, filters = {}) {
       columnStyles: {
         0: { cellWidth: 'auto' },
         1: { cellWidth: 'auto' },
-        2: { halign: 'right' },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
+        2: { cellWidth: 'auto' },
+        3: { cellWidth: 'wrap' },
+        4: { cellWidth: 'auto' },
         5: { cellWidth: 'wrap' },
         6: { cellWidth: 'wrap' },
         7: { halign: 'center' }
@@ -372,9 +564,23 @@ generateInventoryReport(inventory, filters = {}) {
       margin: { left: 20, right: 20 },
       alternateRowStyles: {
         fillColor: [248, 249, 250]
+      },
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index === 7) {
+          const estado = clients[data.row.index].estado;
+          if (estado === 'Inactivo') {
+            data.cell.styles.fillColor = [255, 235, 238];
+            data.cell.styles.textColor = [244, 67, 54];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (estado === 'Activo') {
+            data.cell.styles.fillColor = [232, 245, 233];
+            data.cell.styles.textColor = [46, 125, 50];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
       }
     });
-
+  
     this.addFooter();
     return this.doc;
   }

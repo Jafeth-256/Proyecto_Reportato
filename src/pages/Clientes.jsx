@@ -10,10 +10,12 @@ const Clientes = () => {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -53,7 +55,17 @@ const Clientes = () => {
   );
 
   const handleGenerateReport = () => {
-    // generateClientReport(filteredClientes);
+    setShowReportModal(true);
+  };
+
+  const handleConfirmReport = async () => {
+    const clientesToReport = includeInactive 
+      ? filteredClientes 
+      : filteredClientes.filter(c => c.estado === 'Activo');
+    
+    await generateClientReport(clientesToReport, {}, includeInactive);
+    setShowReportModal(false);
+    setIncludeInactive(false);
   };
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -395,6 +407,7 @@ const Clientes = () => {
               </div>
             )}
 
+            {/* Modal para crear/editar cliente */}
             {showModal && (
               <div
                 className="modal show d-block"
@@ -512,6 +525,104 @@ const Clientes = () => {
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal para opciones de reporte */}
+            {showReportModal && (
+              <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <div className="modal-dialog modal-dialog-centered">
+                  <div className="modal-content">
+                    <div className="modal-header">
+                      <h5 className="modal-title">
+                        <i className="fas fa-file-pdf text-danger me-2"></i>
+                        Generar Reporte de Clientes
+                      </h5>
+                      <button
+                        type="button"
+                        className="btn-close"
+                        onClick={() => {
+                          setShowReportModal(false);
+                          setIncludeInactive(false);
+                        }}
+                      ></button>
+                    </div>
+                    <div className="modal-body">
+                      <p className="text-muted mb-3">
+                        Seleccione las opciones para el reporte PDF:
+                      </p>
+                      
+                      <div className="alert alert-info border-0 mb-3">
+                        <i className="fas fa-info-circle me-2"></i>
+                        <strong>Total de clientes a incluir:</strong>
+                        <span className="ms-2 badge bg-primary">
+                          {includeInactive 
+                            ? filteredClientes.length 
+                            : filteredClientes.filter(c => c.estado === 'Activo').length}
+                        </span>
+                      </div>
+
+                      <div className="form-check form-switch mb-3">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="includeInactive"
+                          checked={includeInactive}
+                          onChange={(e) => setIncludeInactive(e.target.checked)}
+                        />
+                        <label className="form-check-label" htmlFor="includeInactive">
+                          <strong>Incluir clientes inactivos</strong>
+                          <br />
+                          <small className="text-muted">
+                            {includeInactive 
+                              ? `Se incluirán ${filteredClientes.filter(c => c.estado === 'Inactivo').length} clientes inactivos`
+                              : 'Solo se incluirán clientes activos en el reporte'}
+                          </small>
+                        </label>
+                      </div>
+
+                      {includeInactive && (
+                        <div className="alert alert-warning border-0">
+                          <i className="fas fa-exclamation-triangle me-2"></i>
+                          <small>
+                            Los clientes inactivos se destacarán en <strong className="text-danger">rojo</strong> en el reporte.
+                          </small>
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setShowReportModal(false);
+                          setIncludeInactive(false);
+                        }}
+                      >
+                        <i className="fas fa-times me-1"></i>
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary-green"
+                        onClick={handleConfirmReport}
+                        disabled={isGenerating}
+                      >
+                        {isGenerating ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-file-pdf me-1"></i>
+                            Generar PDF
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -103,13 +103,19 @@ const useReports = () => {
     }
   };
 
-  const generateInventoryReport = async (inventory, filters = {}) => {
+  const generateInventoryReport = async (inventory, filters = {}, includeZeroStock = false) => {
     try {
       setIsGenerating(true);
       setError(null);
 
       const reportService = new ReportService();
-      reportService.generateInventoryReport(inventory, filters);
+
+      // Filtrar productos según la opción de incluir productos sin stock
+      const filteredInventory = includeZeroStock 
+        ? inventory 
+        : inventory.filter(item => item.stock_actual > 0);
+
+      const doc = reportService.generateInventoryReport(filteredInventory, filters, includeZeroStock);
       const filename = `reporte_inventario_${new Date().toISOString().split('T')[0]}.pdf`;
       reportService.downloadPDF(filename);
       return { success: true, filename };
@@ -197,6 +203,25 @@ const useReports = () => {
       setIsGenerating(false);
     }
   };
+const generateClientReport = async (clients, filters = {}, includeInactive = false) => {
+  try {
+    setIsGenerating(true);
+    setError(null);
+
+    const reportService = new ReportService();
+    const doc = reportService.generateClientReport(clients, filters, includeInactive);
+    const filename = `reporte_clientes_${new Date().toISOString().split('T')[0]}.pdf`;
+    reportService.downloadPDF(filename);
+    return { success: true, filename };
+  } catch (err) {
+    console.error('Error al generar reporte de clientes:', err);
+    setError('Error al generar el reporte PDF de clientes');
+    return { success: false, error: err.message };
+  } finally {
+    setIsGenerating(false);
+  }
+};
+  
 
   return {
     generateDailyReport,
@@ -208,6 +233,7 @@ const useReports = () => {
     generateCuentasPorPagarReport,
     generateCuentasPorCobrarReport,
     generateComparativeReport,
+    generateClientReport,
     isGenerating,
     error,
     clearError: () => setError(null)
