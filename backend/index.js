@@ -7,16 +7,20 @@ const nodemailer = require('nodemailer');
 
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+}));
+
 app.use(express.json());
 
 const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: 'admin',
-  database: 'reportato'
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'admin',
+  database: process.env.DB_NAME || 'reportato'
 };
 
 const transporter = nodemailer.createTransport({
@@ -495,7 +499,6 @@ app.get('/inventario', async (req, res) => {
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
-checkpoint
 app.post('/inventario', async (req, res) => {
   try {
     const { producto_id, stock_actual, stock_minimo, precio_unitario, fecha_ingreso, fecha_vencimiento, estado } = req.body;
@@ -1017,7 +1020,7 @@ app.post('/facturas-proveedores', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
-checkpoint
+
 app.post('/abonos-proveedores', async (req, res) => {
   const connection = await pool.getConnection();
   try {
