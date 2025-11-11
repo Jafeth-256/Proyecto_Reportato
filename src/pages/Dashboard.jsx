@@ -5,6 +5,7 @@ import SalesByDayChart from '../components/SalesByDayChart';
 import PaymentMethodChart from '../components/PaymentMethodChart';
 import StockChart from '../components/StockChart';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const Dashboard = () => {
   const [branches, setBranches] = useState([]);
@@ -18,13 +19,13 @@ const Dashboard = () => {
 
   useEffect(() => {
     // Fetch branches
-    fetch('http://localhost:3001/sucursales/activas')
+    fetch(`${API_BASE_URL}/sucursales/activas`)
       .then(res => res.json())
       .then(data => setBranches(data))
       .catch(err => console.error("Error fetching branches:", err));
 
     // Fetch stock data
-    fetch('http://localhost:3001/inventario')
+    fetch(`${API_BASE_URL}/inventario`)
       .then(res => res.json())
       .then(data => setStockData(data))
       .catch(err => console.error("Error fetching stock:", err));
@@ -44,7 +45,7 @@ const Dashboard = () => {
       startDate = lastMonth.toISOString().split('T')[0];
     }
 
-    let statsUrl = `http://localhost:3001/ventas-diarias/estadisticas?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
+    let statsUrl = `${API_BASE_URL}/ventas-diarias/estadisticas?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
     if (selectedBranch) {
       statsUrl += `&sucursal_id=${selectedBranch}`;
     }
@@ -77,7 +78,7 @@ const Dashboard = () => {
       })
       .catch(err => console.error("Error fetching stats:", err));
 
-    let salesByBranchUrl = `http://localhost:3001/ventas-diarias/resumen?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
+    let salesByBranchUrl = `${API_BASE_URL}/ventas-diarias/resumen?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
     if (selectedBranch) {
         salesByBranchUrl += `&sucursal_id=${selectedBranch}`;
     }
@@ -87,7 +88,7 @@ const Dashboard = () => {
         .then(data => setSalesByBranch(data))
         .catch(err => console.error("Error fetching sales by branch:", err));
 
-    let salesByDayUrl = `http://localhost:3001/ventas-diarias?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
+    let salesByDayUrl = `${API_BASE_URL}/ventas-diarias?fecha_inicio=${startDate}&fecha_fin=${endDate}`;
     if (selectedBranch) {
         salesByDayUrl += `&sucursal_id=${selectedBranch}`;
     }
