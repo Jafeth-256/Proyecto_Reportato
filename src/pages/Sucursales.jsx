@@ -12,12 +12,20 @@ const Sucursales = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: '',
     tipo: 'verdulería',
     ubicacion: '',
     estado: 'activa'
+  });
+
+  const [formErrors, setFormErrors] = useState({
+    nombre: '',
+    ubicacion: ''
   });
 
   const tiposDisponibles = [
@@ -27,6 +35,80 @@ const Sucursales = () => {
     { value: 'mayorista', label: 'Mayorista' }
   ];
 
+  // Función para sanitizar texto y prevenir XSS
+  const sanitizeInput = (input) => {
+    if (typeof input !== 'string') return '';
+    return input
+      .trim()
+      .replace(/[<>]/g, '') // Remover < y > para prevenir tags HTML
+      .replace(/['"]/g, '') // Remover comillas
+      .substring(0, 255); // Limitar longitud máxima
+  };
+
+  // Validación de nombre de sucursal
+  const validateNombre = (nombre) => {
+    const trimmed = nombre.trim();
+    if (!trimmed) {
+      return 'El nombre es requerido';
+    }
+    if (trimmed.length < 3) {
+      return 'El nombre debe tener al menos 3 caracteres';
+    }
+    if (trimmed.length > 100) {
+      return 'El nombre no puede exceder 100 caracteres';
+    }
+    // Validar que contenga al menos una letra
+    if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(trimmed)) {
+      return 'El nombre debe contener al menos una letra';
+    }
+    // Validar caracteres permitidos (letras, números, espacios, guiones)
+    if (!/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\-]+$/.test(trimmed)) {
+      return 'El nombre solo puede contener letras, números, espacios y guiones';
+    }
+    return '';
+  };
+
+  // Validación de ubicación
+  const validateUbicacion = (ubicacion) => {
+    const trimmed = ubicacion.trim();
+    if (!trimmed) {
+      return 'La ubicación es requerida';
+    }
+    if (trimmed.length < 5) {
+      return 'La ubicación debe tener al menos 5 caracteres';
+    }
+    if (trimmed.length > 255) {
+      return 'La ubicación no puede exceder 255 caracteres';
+    }
+    // Validar que contenga al menos una letra
+    if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(trimmed)) {
+      return 'La ubicación debe contener al menos una letra';
+    }
+    return '';
+  };
+
+  // Validar tipo permitido
+  const validateTipo = (tipo) => {
+    const tiposValidos = tiposDisponibles.map(t => t.value);
+    return tiposValidos.includes(tipo);
+  };
+
+  // Validar estado permitido
+  const validateEstado = (estado) => {
+    return estado === 'activa' || estado === 'inactiva';
+  };
+
+  // Auto-ocultar mensajes después de 5 segundos
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError('');
+        setSuccess('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
   // Cargar sucursales desde la API
   useEffect(() => {
     fetchSucursales();
@@ -35,14 +117,17 @@ const Sucursales = () => {
   const fetchSucursales = async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await fetch(`${API_BASE_URL}/sucursales`);
       if (response.ok) {
         const data = await response.json();
         setSucursales(data);
       } else {
-        console.error('Error al obtener sucursales');
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Error al cargar las sucursales. Por favor, intenta nuevamente.');
       }
     } catch (error) {
+      setError('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
       console.error('Error:', error);
     } finally {
       setLoading(false);
@@ -65,38 +150,105 @@ const Sucursales = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
+    // Actualizar valor del formulario
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+
+    // Validar en tiempo real y actualizar errores
+    let errorMessage = '';
+    if (name === 'nombre') {
+      errorMessage = validateNombre(value);
+    } else if (name === 'ubicacion') {
+      errorMessage = validateUbicacion(value);
+    }
+
+    setFormErrors(prev => ({
+      ...prev,
+      [name]: errorMessage
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
+    // Prevenir doble submit
+    if (isSubmitting) return;
+
+    // Limpiar mensajes anteriores
+    setError('');
+    setSuccess('');
+
+    // Validar todos los campos
+    const nombreError = validateNombre(formData.nombre);
+    const ubicacionError = validateUbicacion(formData.ubicacion);
+
+    // Actualizar errores en el formulario
+    setFormErrors({
+      nombre: nombreError,
+      ubicacion: ubicacionError
+    });
+
+    // Si hay errores, no enviar
+    if (nombreError || ubicacionError) {
+      setError('Por favor, corrige los errores en el formulario antes de continuar.');
+      return;
+    }
+
+    // Validar tipo y estado
+    if (!validateTipo(formData.tipo)) {
+      setError('El tipo de sucursal seleccionado no es válido.');
+      return;
+    }
+
+    if (!validateEstado(formData.estado)) {
+      setError('El estado seleccionado no es válido.');
+      return;
+    }
+
     try {
-      const url = editingItem 
-      ? `${API_BASE_URL}/sucursales/${editingItem.id}`
-      : `${API_BASE_URL}/sucursales`;
-      
+      setIsSubmitting(true);
+
+      // Sanitizar datos antes de enviar
+      const sanitizedData = {
+        nombre: sanitizeInput(formData.nombre),
+        tipo: formData.tipo,
+        ubicacion: sanitizeInput(formData.ubicacion),
+        estado: formData.estado
+      };
+
+      const url = editingItem
+        ? `${API_BASE_URL}/sucursales/${editingItem.id}`
+        : `${API_BASE_URL}/sucursales`;
+
       const method = editingItem ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method: method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(sanitizedData),
       });
 
       if (response.ok) {
+        setSuccess(editingItem
+          ? 'Sucursal actualizada exitosamente'
+          : 'Sucursal creada exitosamente'
+        );
         await fetchSucursales(); // Recargar la lista
         resetForm();
       } else {
-        console.error('Error al guardar sucursal');
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Error al guardar la sucursal. Por favor, intenta nuevamente.');
       }
     } catch (error) {
+      setError('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
       console.error('Error:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -107,8 +259,14 @@ const Sucursales = () => {
       ubicacion: '',
       estado: 'activa'
     });
+    setFormErrors({
+      nombre: '',
+      ubicacion: ''
+    });
     setEditingItem(null);
     setShowModal(false);
+    setError('');
+    setSuccess('');
   };
 
   const handleEdit = (item) => {
@@ -123,27 +281,51 @@ const Sucursales = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar esta sucursal?')) {
+    if (!id || typeof id !== 'number') {
+      setError('ID de sucursal inválido.');
+      return;
+    }
+
+    if (window.confirm('¿Estás seguro de que deseas eliminar esta sucursal? Esta acción no se puede deshacer.')) {
       try {
+        setError('');
+        setSuccess('');
+
         const response = await fetch(`${API_BASE_URL}/sucursales/${id}`, {
           method: 'DELETE',
         });
 
         if (response.ok) {
+          setSuccess('Sucursal eliminada exitosamente');
           await fetchSucursales(); // Recargar la lista
         } else {
-          console.error('Error al eliminar sucursal');
+          const errorData = await response.json().catch(() => ({}));
+          setError(errorData.message || 'Error al eliminar la sucursal. Por favor, intenta nuevamente.');
         }
       } catch (error) {
+        setError('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
         console.error('Error:', error);
       }
     }
   };
 
   const handleToggleStatus = async (id, currentStatus) => {
+    if (!id || typeof id !== 'number') {
+      setError('ID de sucursal inválido.');
+      return;
+    }
+
+    if (!validateEstado(currentStatus)) {
+      setError('Estado actual inválido.');
+      return;
+    }
+
     const newStatus = currentStatus === 'activa' ? 'inactiva' : 'activa';
-    
+
     try {
+      setError('');
+      setSuccess('');
+
       const response = await fetch(`${API_BASE_URL}/sucursales/${id}/estado`, {
         method: 'PATCH',
         headers: {
@@ -153,11 +335,14 @@ const Sucursales = () => {
       });
 
       if (response.ok) {
+        setSuccess(`Sucursal ${newStatus === 'activa' ? 'activada' : 'desactivada'} exitosamente`);
         await fetchSucursales(); // Recargar la lista
       } else {
-        console.error('Error al cambiar estado de sucursal');
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Error al cambiar el estado de la sucursal. Por favor, intenta nuevamente.');
       }
     } catch (error) {
+      setError('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
       console.error('Error:', error);
     }
   };
@@ -217,6 +402,33 @@ const Sucursales = () => {
         
         <div className="content-area">
           <div className="container-fluid p-4">
+            {/* Alertas de éxito y error */}
+            {error && (
+              <div className="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+                <i className="fas fa-exclamation-circle me-2"></i>
+                {error}
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setError('')}
+                  aria-label="Close"
+                ></button>
+              </div>
+            )}
+
+            {success && (
+              <div className="alert alert-success alert-dismissible fade show mb-4" role="alert">
+                <i className="fas fa-check-circle me-2"></i>
+                {success}
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setSuccess('')}
+                  aria-label="Close"
+                ></button>
+              </div>
+            )}
+
             {/* Header */}
             <div className="row mb-4">
               <div className="col-12">
@@ -480,13 +692,22 @@ const Sucursales = () => {
                       <label className="form-label">Nombre de la Sucursal *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${formErrors.nombre ? 'is-invalid' : ''}`}
                         name="nombre"
                         value={formData.nombre}
                         onChange={handleInputChange}
                         placeholder="Ej: Verdulería Cartago"
                         required
+                        maxLength="100"
                       />
+                      {formErrors.nombre && (
+                        <div className="invalid-feedback">
+                          {formErrors.nombre}
+                        </div>
+                      )}
+                      <div className="form-text">
+                        Mínimo 3 caracteres, máximo 100. Solo letras, números, espacios y guiones.
+                      </div>
                     </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Tipo de Sucursal *</label>
@@ -508,13 +729,22 @@ const Sucursales = () => {
                       <label className="form-label">Ubicación *</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${formErrors.ubicacion ? 'is-invalid' : ''}`}
                         name="ubicacion"
                         value={formData.ubicacion}
                         onChange={handleInputChange}
                         placeholder="Ej: San Rafael de Cartago, Centro Comercial Plaza"
                         required
+                        maxLength="255"
                       />
+                      {formErrors.ubicacion && (
+                        <div className="invalid-feedback">
+                          {formErrors.ubicacion}
+                        </div>
+                      )}
+                      <div className="form-text">
+                        Mínimo 5 caracteres, máximo 255. Describe la ubicación completa de la sucursal.
+                      </div>
                     </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Estado</label>
@@ -541,8 +771,16 @@ const Sucursales = () => {
                   <button
                     type="submit"
                     className="btn btn-primary-purple"
+                    disabled={isSubmitting}
                   >
-                    {editingItem ? 'Actualizar' : 'Crear'} Sucursal
+                    {isSubmitting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        {editingItem ? 'Actualizando...' : 'Creando...'}
+                      </>
+                    ) : (
+                      <>{editingItem ? 'Actualizar' : 'Crear'} Sucursal</>
+                    )}
                   </button>
                 </div>
               </form>

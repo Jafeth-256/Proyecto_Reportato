@@ -12,15 +12,14 @@ const CuentasPorPagar = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showAbonoModal, setShowAbonoModal] = useState(false);
+  const [showHistorialModal, setShowHistorialModal] = useState(false);
   const [editingFactura, setEditingFactura] = useState(null);
   const [facturaParaAbono, setFacturaParaAbono] = useState(null);
+  const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
+  const [abonos, setAbonos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  
-  const [reportData, setReportData] = useState(null);
-  const [reportProveedor, setReportProveedor] = useState('');
-  const [reportWeek, setReportWeek] = useState('');
 
   const [formData, setFormData] = useState({
     proveedor_id: '',
@@ -69,7 +68,22 @@ const CuentasPorPagar = () => {
       setLoading(false);
     }
   };
-  
+
+  const fetchAbonos = async (facturaId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pagos-proveedores?factura_id=${facturaId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAbonos(data && Array.isArray(data) ? data : []);
+      } else {
+        setAbonos([]);
+      }
+    } catch (error) {
+      console.error('Error al obtener pagos:', error);
+      setAbonos([]);
+    }
+  };
+
   const filteredFacturas = facturas.filter(factura =>
     factura.nombre_proveedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
     factura.numero_factura.toLowerCase().includes(searchTerm.toLowerCase())
@@ -100,15 +114,38 @@ const CuentasPorPagar = () => {
     e.preventDefault();
     
     try {
-      const url = editingFactura 
+      const url = editingFactura
       ? `${API_BASE_URL}/facturas-proveedores/${editingFactura.id}`
       : `${API_BASE_URL}/facturas-proveedores`;
-      
+
       const method = editingFactura ? 'PUT' : 'POST';
-      
+
+      const nuevoMonto = Number(formData.monto);
+
+      // Si es edición, recalcular el saldo basado en el nuevo monto y pagos existentes
+      let nuevoSaldo = nuevoMonto;
+      if (editingFactura) {
+        // Obtener los pagos existentes para esta factura
+        try {
+          const response_pagos = await fetch(`${API_BASE_URL}/abonos-proveedores?factura_id=${editingFactura.id}`);
+          if (response_pagos.ok) {
+            const pagos_data = await response_pagos.json();
+            const totalPagos = pagos_data && Array.isArray(pagos_data)
+              ? pagos_data.reduce((sum, pago) => sum + parseFloat(pago.monto || 0), 0)
+              : 0;
+            nuevoSaldo = nuevoMonto - totalPagos;
+          }
+        } catch (err) {
+          // Si hay error obteniendo pagos, solo usa el nuevo monto
+          console.warn('Error obteniendo pagos:', err);
+          nuevoSaldo = nuevoMonto;
+        }
+      }
+
       const body = {
         ...formData,
-        monto: Number(formData.monto)
+        monto: nuevoMonto,
+        saldo: Math.max(0, nuevoSaldo) // No permitir saldo negativo
       };
 
       const response = await fetch(url, {
@@ -208,57 +245,39 @@ const CuentasPorPagar = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('es-CR');
+    return new Date(dateString).toLocaleDateString('es-ES');
   };
-  
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-CR', {
-      style: 'currency',
-      currency: 'CRC',
-      minimumFractionDigits: 2
-    }).format(amount);
+
+  const formatCurrency = (value) => {
+    const num = parseFloat(value) || 0;
+    return `₡ ${num.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
-  
+
+  // Calcular deuda total por proveedor (solo saldos pendientes > 0)
   const totalDeudaPorProveedor = useMemo(() => {
     return facturas.reduce((acc, factura) => {
-      const { nombre_proveedor, saldo } = factura;
-      if (!acc[nombre_proveedor]) {
-        acc[nombre_proveedor] = 0;
+      const saldo = parseFloat(factura.saldo) || 0;
+      if (saldo > 0) { // Solo contar saldos pendientes
+        const proveedor = factura.nombre_proveedor;
+        acc[proveedor] = (acc[proveedor] || 0) + saldo;
       }
-      acc[nombre_proveedor] += parseFloat(saldo) || 0;
       return acc;
     }, {});
   }, [facturas]);
-  
-  const handleGenerateReport = async () => {
-    if (!reportProveedor || !reportWeek) {
-      alert('Por favor seleccione un proveedor y una semana.');
-      return;
-    }
 
-    const [year, week] = reportWeek.split('-W');
-    const a = new Date(year, 0, (1 + (week - 1) * 7));
-    const b = new Date(year, 0, (1 + (week - 1) * 7));
-    const day = a.getDay();
-    const diff = a.getDate() - day + (day == 0 ? -6 : 2);
-    const firstDay = new Date(a.setDate(diff));
-    const lastDay = new Date(b.setDate(diff + 6));
+  // Calcular deuda total general
+  const deudaTotalGeneral = useMemo(() => {
+    return Object.values(totalDeudaPorProveedor).reduce((sum, val) => sum + val, 0);
+  }, [totalDeudaPorProveedor]);
 
-    const fecha_inicio = firstDay.toISOString().split('T')[0];
-    const fecha_fin = lastDay.toISOString().split('T')[0];
+  // Calcular indicadores clave
+  const indicadores = useMemo(() => {
+    const total = facturas.length;
+    const pagadas = facturas.filter(f => f.saldo === 0).length;
+    const conDeuda = facturas.filter(f => f.saldo > 0).length;
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/reportes/deuda-proveedor-semanal?proveedor_id=${reportProveedor}&fecha_inicio=${fecha_inicio}&fecha_fin=${fecha_fin}`);
-      if (response.ok) {
-        const data = await response.json();
-        setReportData(data);
-      } else {
-        console.error('Error al generar reporte');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
+    return { total, pagadas, conDeuda };
+  }, [facturas]);
 
   if (loading) {
     return (
@@ -360,7 +379,7 @@ const CuentasPorPagar = () => {
                             <th className="border-0 px-4 py-3">Factura #</th>
                             <th className="border-0 px-4 py-3">Monto</th>
                             <th className="border-0 px-4 py-3">Saldo</th>
-                            <th className="border-0 px-4 py-3">Fecha Emisión</th>
+                            {/* <th className="border-0 px-4 py-3">Historial</th> */}
                             <th className="border-0 px-4 py-3">Acciones</th>
                           </tr>
                         </thead>
@@ -371,21 +390,35 @@ const CuentasPorPagar = () => {
                               <td className="px-4 py-3">{factura.numero_factura}</td>
                               <td className="px-4 py-3">{formatCurrency(factura.monto)}</td>
                               <td className="px-4 py-3">{formatCurrency(factura.saldo)}</td>
-                              <td className="px-4 py-3">{formatDate(factura.fecha_emision)}</td>
+                              {/* <td className="px-4 py-3">
+                                <button
+                                  className="btn btn-sm btn-outline-info"
+                                  onClick={() => {
+                                    setFacturaSeleccionada(factura);
+                                    fetchAbonos(factura.id);
+                                    setShowHistorialModal(true);
+                                  }}
+                                  title="Ver historial de pagos"
+                                >
+                                  <i className="fas fa-history"></i>
+                                </button>
+                              </td> */}
                               <td className="px-4 py-3">
                                 <div className="d-flex gap-2">
+                                  {factura.saldo > 0 && (
+                                    <button
+                                      className="btn btn-sm btn-outline-success"
+                                      onClick={() => {
+                                        setFacturaParaAbono(factura);
+                                        setShowAbonoModal(true);
+                                      }}
+                                      title="Registrar pago"
+                                    >
+                                      <i className="fas fa-hand-holding-dollar"></i>
+                                    </button>
+                                  )}
                                   <button
-                                    className="btn btn-sm btn-outline-success"
-                                    onClick={() => {
-                                      setFacturaParaAbono(factura);
-                                      setShowAbonoModal(true);
-                                    }}
-                                    title="Registrar pago"
-                                  >
-                                    <i className="fas fa-hand-holding-dollar"></i>
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
+                                    className="btn btn-sm btn-outline-warning"
                                     onClick={() => handleEdit(factura)}
                                     title="Editar"
                                   >
@@ -436,50 +469,44 @@ const CuentasPorPagar = () => {
                     <h5 className="card-title mb-0 fw-bold">Deuda Total por Proveedor</h5>
                   </div>
                   <div className="card-body">
-                    {Object.entries(totalDeudaPorProveedor).map(([proveedor, total]) => (
-                      <div key={proveedor} className="d-flex justify-content-between align-items-center mb-2">
-                        <span>{proveedor}</span>
-                        <span className="fw-bold">{formatCurrency(total)}</span>
+                    {Object.entries(totalDeudaPorProveedor).length > 0 ? (
+                      Object.entries(totalDeudaPorProveedor).map(([proveedor, total]) => (
+                        <div key={proveedor} className="d-flex justify-content-between align-items-center mb-2 small">
+                          <span className="text-dark">{proveedor}</span>
+                          <span className="fw-bold text-danger">{formatCurrency(total)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="small text-muted text-center py-3">
+                        No hay deudas pendientes
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
                 <div className="card border-0 shadow-sm">
                   <div className="card-header bg-white border-0 py-3">
-                    <h5 className="card-title mb-0 fw-bold">Reporte Semanal</h5>
+                    <h5 className="card-title mb-0 fw-bold">
+                      <i className="fas fa-chart-bar me-2 text-primary-purple"></i>
+                      Indicadores de Cartera
+                    </h5>
                   </div>
                   <div className="card-body">
-                    <div className="mb-3">
-                      <label className="form-label">Proveedor</label>
-                      <select className="form-select" value={reportProveedor} onChange={(e) => setReportProveedor(e.target.value)}>
-                        <option value="">Seleccionar proveedor</option>
-                        {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                      </select>
+                    <div className="small text-muted mb-2">Deuda Total: <span className="text-danger fw-bold">{formatCurrency(deudaTotalGeneral)}</span></div>
+                    <hr className="my-2"/>
+                    <div className="small mb-2">
+                      <span className="text-muted">Total:</span> <strong>{indicadores.total}</strong>
+                      <span className="text-muted ms-3">Pagadas:</span> <strong>{indicadores.pagadas}</strong>
+                      <span className="text-muted ms-3">Con Deuda:</span> <strong className="text-danger">{indicadores.conDeuda}</strong>
                     </div>
-                    <div className="mb-3">
-                      <label className="form-label">Semana</label>
-                      <input type="week" className="form-control" value={reportWeek} onChange={(e) => setReportWeek(e.target.value)} />
-                    </div>
-                    <button className="btn btn-primary-purple w-100" onClick={handleGenerateReport}>
-                      Generar Reporte
+                    <hr className="my-2"/>
+                    <button
+                      className="btn btn-primary-purple w-100 btn-sm"
+                      onClick={() => generateCuentasPorPagarReport(filteredFacturas)}
+                      disabled={isGenerating}
+                    >
+                      <i className={`fas ${isGenerating ? 'fa-spinner fa-spin' : 'fa-file-pdf'} me-1`}></i>
+                      {isGenerating ? 'Generando...' : 'Descargar Reporte Completo'}
                     </button>
-                    {reportData && (
-                      <div className="mt-4">
-                        <h6>Reporte para {reportData.facturas[0]?.nombre_proveedor}</h6>
-                        <ul className="list-group">
-                          {reportData.facturas.map(factura => (
-                            <li key={factura.numero_factura} className="list-group-item d-flex justify-content-between align-items-center">
-                              {factura.numero_factura}
-                              <span className="badge bg-primary rounded-pill">{formatCurrency(factura.monto)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="d-flex justify-content-between align-items-center mt-3 fw-bold">
-                          <span>Total Semanal</span>
-                          <span>{formatCurrency(reportData.total || 0)}</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -643,6 +670,75 @@ const CuentasPorPagar = () => {
           </div>
         </div>
       )}
+
+      {/* {showHistorialModal && facturaSeleccionada && (
+        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header border-bottom">
+                <h5 className="modal-title fw-bold">
+                  <i className="fas fa-history me-2"></i>
+                  Historial de Pagos
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowHistorialModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="small text-muted border-bottom pb-2 mb-3">
+                  <strong>Factura:</strong> {facturaSeleccionada.numero_factura} | <strong>Proveedor:</strong> {facturaSeleccionada.nombre_proveedor} | <strong>Monto:</strong> ₡ {Number(facturaSeleccionada.monto).toLocaleString('es-CR', { minimumFractionDigits: 2 })} | <strong>Saldo:</strong> <span className={facturaSeleccionada.saldo > 0 ? 'text-danger fw-bold' : 'text-success fw-bold'}>₡ {Number(facturaSeleccionada.saldo).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</span>
+                </div>
+
+                {abonos && abonos.length > 0 ? (
+                  <div className="table-responsive">
+                    <table className="table table-sm table-borderless small mb-2">
+                      <thead className="border-bottom">
+                        <tr>
+                          <th className="py-1">Fecha</th>
+                          <th className="py-1">Monto</th>
+                          <th className="py-1">Método</th>
+                          <th className="py-1">Referencia</th>
+                          <th className="py-1">Registrado por</th>
+                        </tr>
+                      </thead>
+                      <tbody className="border-bottom">
+                        {abonos.map((abono, idx) => (
+                          <tr key={idx}>
+                            <td className="py-1">{formatDate(abono.fecha_pago)}</td>
+                            <td className="py-1"><strong>₡ {Number(abono.monto).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</strong></td>
+                            <td className="py-1">{abono.metodo_pago || '-'}</td>
+                            <td className="py-1">{abono.referencia || '-'}</td>
+                            <td className="py-1">{abono.usuario_registro || 'N/A'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="small text-muted pt-2">
+                      <strong>Total Pagado:</strong> ₡ {Number(abonos.reduce((sum, a) => sum + parseFloat(a.monto), 0)).toLocaleString('es-CR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="small text-muted">
+                    No hay pagos registrados para esta factura
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer border-top">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowHistorialModal(false)}
+                >
+                  <i className="fas fa-times me-1"></i>
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )} */}
     </div>
   );
 };

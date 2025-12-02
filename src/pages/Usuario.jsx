@@ -14,6 +14,7 @@ const Usuario = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const rolUsuario = localStorage.getItem("rol");
   const puedeCrear = permisos[rolUsuario]?.usuarios.includes("crear");
@@ -27,6 +28,12 @@ const Usuario = () => {
     contrasena: "",
   });
 
+  const [formErrors, setFormErrors] = useState({
+    nombre: "",
+    correo: "",
+    contrasena: "",
+  });
+
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
     title: "",
@@ -35,6 +42,123 @@ const Usuario = () => {
     showCopyButton: false,
     copyText: "",
   });
+
+  // Función para sanitizar texto y prevenir XSS
+  const sanitizeInput = (input) => {
+    if (typeof input !== 'string') return '';
+    return input
+      .trim()
+      .replace(/[<>]/g, '') // Remover < y > para prevenir tags HTML
+      .replace(/['"]/g, '') // Remover comillas
+      .substring(0, 255); // Limitar longitud máxima
+  };
+
+  // Validación estricta de nombre
+  const validateNombre = (nombre) => {
+    const trimmed = nombre.trim();
+    if (!trimmed) {
+      return 'El nombre es requerido';
+    }
+    if (trimmed.length < 3) {
+      return 'El nombre debe tener al menos 3 caracteres';
+    }
+    if (trimmed.length > 100) {
+      return 'El nombre no puede exceder 100 caracteres';
+    }
+    // Validar que contenga al menos dos palabras (nombre y apellido)
+    const palabras = trimmed.split(/\s+/).filter(p => p.length > 0);
+    if (palabras.length < 2) {
+      return 'Debe ingresar nombre y apellido';
+    }
+    // Validar que solo contenga letras y espacios
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(trimmed)) {
+      return 'El nombre solo puede contener letras y espacios';
+    }
+    return '';
+  };
+
+  // Validación estricta de correo electrónico
+  const validateCorreo = (correo) => {
+    const trimmed = correo.trim();
+    if (!trimmed) {
+      return 'El correo electrónico es requerido';
+    }
+
+    // Expresión regular estricta para correo electrónico
+    const emailRegex = /^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
+
+    if (!emailRegex.test(trimmed)) {
+      return 'El formato del correo electrónico no es válido';
+    }
+
+    // Validar longitud
+    if (trimmed.length > 255) {
+      return 'El correo no puede exceder 255 caracteres';
+    }
+
+    // Validar que no tenga caracteres consecutivos especiales
+    if (/[._-]{2,}/.test(trimmed)) {
+      return 'El correo no puede tener caracteres especiales consecutivos';
+    }
+
+    // Validar que la parte local no empiece ni termine con punto
+    const [localPart] = trimmed.split('@');
+    if (localPart.startsWith('.') || localPart.endsWith('.')) {
+      return 'El correo no puede empezar ni terminar con un punto antes del @';
+    }
+
+    return '';
+  };
+
+  // Validación estricta de contraseña
+  const validateContrasena = (contrasena) => {
+    if (!contrasena) {
+      return ''; // Solo validar si se proporciona una contraseña
+    }
+
+    const trimmed = contrasena.trim();
+
+    if (trimmed.length < 8) {
+      return 'La contraseña debe tener al menos 8 caracteres';
+    }
+
+    if (trimmed.length > 128) {
+      return 'La contraseña no puede exceder 128 caracteres';
+    }
+
+    // Debe contener al menos una letra mayúscula
+    if (!/[A-Z]/.test(trimmed)) {
+      return 'Debe contener al menos una letra mayúscula';
+    }
+
+    // Debe contener al menos una letra minúscula
+    if (!/[a-z]/.test(trimmed)) {
+      return 'Debe contener al menos una letra minúscula';
+    }
+
+    // Debe contener al menos un número
+    if (!/[0-9]/.test(trimmed)) {
+      return 'Debe contener al menos un número';
+    }
+
+    // Debe contener al menos un carácter especial
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(trimmed)) {
+      return 'Debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}etc.)';
+    }
+
+    // No debe contener espacios
+    if (/\s/.test(trimmed)) {
+      return 'La contraseña no puede contener espacios';
+    }
+
+    return '';
+  };
+
+  // Validar rol permitido
+  const validateRol = (rol) => {
+    const rolesValidos = ['Administrador', 'Usuario'];
+    return rolesValidos.includes(rol);
+  };
 
   useEffect(() => {
     fetchUsuarios();
@@ -86,16 +210,70 @@ const Usuario = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevenir doble submit
+    if (isSubmitting) return;
+
+    // Validar todos los campos
+    const nombreError = validateNombre(formData.nombre);
+    const correoError = validateCorreo(formData.correo);
+    const contrasenaError = editingUsuario
+      ? validateContrasena(formData.contrasena) // Solo validar si se proporciona
+      : ''; // En creación, la contraseña es generada automáticamente
+
+    // Actualizar errores en el formulario
+    setFormErrors({
+      nombre: nombreError,
+      correo: correoError,
+      contrasena: contrasenaError,
+    });
+
+    // Si hay errores, no enviar
+    if (nombreError || correoError || contrasenaError) {
+      setAlertConfig({
+        isOpen: true,
+        title: "Errores de validación",
+        message: "Por favor, corrige los errores en el formulario antes de continuar.",
+        type: "error",
+      });
+      return;
+    }
+
+    // Validar rol
+    if (!validateRol(formData.rol)) {
+      setAlertConfig({
+        isOpen: true,
+        title: "Error",
+        message: "El rol seleccionado no es válido.",
+        type: "error",
+      });
+      return;
+    }
+
     const method = editingUsuario ? "PUT" : "POST";
     const url = editingUsuario
-    ? `${API_BASE_URL}/usuarios/${editingUsuario.id}`
-    : `${API_BASE_URL}/usuarios`;
+      ? `${API_BASE_URL}/usuarios/${editingUsuario.id}`
+      : `${API_BASE_URL}/usuarios`;
 
     try {
+      setIsSubmitting(true);
+
+      // Sanitizar datos antes de enviar
+      const sanitizedData = {
+        nombre: sanitizeInput(formData.nombre),
+        correo: sanitizeInput(formData.correo),
+        rol: formData.rol,
+      };
+
+      // Solo incluir contraseña si se está editando Y se proporcionó una nueva
+      if (editingUsuario && formData.contrasena) {
+        sanitizedData.contrasena = formData.contrasena; // No sanitizar la contraseña
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(sanitizedData),
       });
 
       if (response.ok) {
@@ -128,7 +306,7 @@ const Usuario = () => {
         setAlertConfig({
           isOpen: true,
           title: "Error",
-          message: errorData.message,
+          message: errorData.message || "Error al guardar el usuario. Por favor, intenta nuevamente.",
           type: "error",
         });
       }
@@ -141,6 +319,8 @@ const Usuario = () => {
           "No se pudo conectar con el servidor. Por favor, intenta nuevamente.",
         type: "error",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -155,24 +335,53 @@ const Usuario = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("¿Deseas eliminar este usuario?")) {
+    if (!id || typeof id !== 'number') {
+      setAlertConfig({
+        isOpen: true,
+        title: "Error",
+        message: "ID de usuario inválido.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (window.confirm("¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.")) {
       try {
         const response = await fetch(`${API_BASE_URL}/usuarios/${id}`, {
           method: "DELETE",
         });
         if (response.ok) {
+          setAlertConfig({
+            isOpen: true,
+            title: "¡Éxito!",
+            message: "Usuario eliminado exitosamente",
+            type: "success",
+          });
           await fetchUsuarios();
         } else {
-          console.error("Error al eliminar usuario:", response.statusText);
+          const errorData = await response.json().catch(() => ({}));
+          setAlertConfig({
+            isOpen: true,
+            title: "Error",
+            message: errorData.message || "Error al eliminar el usuario. Por favor, intenta nuevamente.",
+            type: "error",
+          });
         }
       } catch (error) {
         console.error("Error al eliminar usuario:", error);
+        setAlertConfig({
+          isOpen: true,
+          title: "Error de conexión",
+          message: "No se pudo conectar con el servidor. Por favor, intenta nuevamente.",
+          type: "error",
+        });
       }
     }
   };
 
   const resetForm = () => {
     setFormData({ nombre: "", correo: "", rol: "Usuario", contrasena: "" });
+    setFormErrors({ nombre: "", correo: "", contrasena: "" });
     setEditingUsuario(null);
     setShowModal(false);
   };
@@ -434,28 +643,40 @@ const Usuario = () => {
                     <form onSubmit={handleSubmit}>
                       <div className="modal-body">
                         <div className="mb-3">
-                          <label className="form-label">Nombre *</label>
+                          <label className="form-label">Nombre Completo *</label>
                           <input
                             type="text"
-                            className="form-control"
+                            className={`form-control ${formErrors.nombre ? 'is-invalid' : ''}`}
                             name="nombre"
                             value={formData.nombre}
                             onChange={handleInputChange}
                             required
-                            placeholder="Ingrese el nombre completo"
+                            placeholder="Ej: Juan Pérez González"
+                            maxLength="100"
                           />
+                          {formErrors.nombre && (
+                            <div className="invalid-feedback">
+                              {formErrors.nombre}
+                            </div>
+                          )}
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">Correo *</label>
+                          <label className="form-label">Correo Electrónico *</label>
                           <input
                             type="email"
-                            className="form-control"
+                            className={`form-control ${formErrors.correo ? 'is-invalid' : ''}`}
                             name="correo"
                             value={formData.correo}
                             onChange={handleInputChange}
                             required
                             placeholder="ejemplo@correo.com"
+                            maxLength="255"
                           />
+                          {formErrors.correo && (
+                            <div className="invalid-feedback">
+                              {formErrors.correo}
+                            </div>
+                          )}
                         </div>
                         <div className="mb-3">
                           <label className="form-label">Rol *</label>
@@ -473,16 +694,39 @@ const Usuario = () => {
                         {editingUsuario && (
                           <div className="mb-3">
                             <label className="form-label">
-                              Contraseña (si desea cambiarla)
+                              Nueva Contraseña (opcional)
                             </label>
                             <input
                               type="password"
-                              className="form-control"
+                              className={`form-control ${formErrors.contrasena ? 'is-invalid' : ''}`}
                               name="contrasena"
                               value={formData.contrasena}
                               onChange={handleInputChange}
                               placeholder="Nueva contraseña"
+                              maxLength="128"
                             />
+                            {formErrors.contrasena && (
+                              <div className="invalid-feedback">
+                                {formErrors.contrasena}
+                              </div>
+                            )}
+                            <div className="form-text">
+                              <strong>Requisitos de contraseña:</strong>
+                              <ul className="mb-0 ps-3" style={{fontSize: '0.85rem'}}>
+                                <li>Mínimo 8 caracteres</li>
+                                <li>Al menos una letra mayúscula (A-Z)</li>
+                                <li>Al menos una letra minúscula (a-z)</li>
+                                <li>Al menos un número (0-9)</li>
+                                <li>Al menos un carácter especial (!@#$%^&*etc.)</li>
+                                <li>Sin espacios</li>
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                        {!editingUsuario && (
+                          <div className="alert alert-info mb-0">
+                            <i className="fas fa-info-circle me-2"></i>
+                            <strong>Nota:</strong> Se generará automáticamente una contraseña temporal segura que deberás compartir con el usuario.
                           </div>
                         )}
                       </div>
@@ -498,13 +742,23 @@ const Usuario = () => {
                           <button
                             type="submit"
                             className="btn btn-primary-purple"
+                            disabled={isSubmitting}
                           >
-                            <i
-                              className={`fas ${
-                                editingUsuario ? "fa-save" : "fa-plus"
-                              } me-1`}
-                            ></i>
-                            {editingUsuario ? "Actualizar" : "Crear"}
+                            {isSubmitting ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                {editingUsuario ? 'Actualizando...' : 'Creando...'}
+                              </>
+                            ) : (
+                              <>
+                                <i
+                                  className={`fas ${
+                                    editingUsuario ? "fa-save" : "fa-plus"
+                                  } me-1`}
+                                ></i>
+                                {editingUsuario ? "Actualizar" : "Crear"}
+                              </>
+                            )}
                           </button>
                         )}
                       </div>

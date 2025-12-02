@@ -222,11 +222,42 @@ const handleGenerateWeeklyBySucursal = async () => {
     item.observaciones?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Agrupar ventas por sucursal
+  const groupedVentas = filteredVentas.reduce((acc, venta) => {
+    const sucursalId = venta.sucursal_id;
+    if (!acc[sucursalId]) {
+      acc[sucursalId] = {
+        sucursal_id: venta.sucursal_id,
+        sucursal_nombre: venta.sucursal_nombre,
+        sucursal_tipo: venta.sucursal_tipo,
+        sucursal_ubicacion: venta.sucursal_ubicacion,
+        ventas: [],
+        total_efectivo: 0,
+        total_tarjeta: 0,
+        total_sinpe: 0,
+        total_ventas: 0,
+        cantidad_registros: 0
+      };
+    }
+    acc[sucursalId].ventas.push(venta);
+    acc[sucursalId].total_efectivo += parseFloat(venta.venta_efectivo) || 0;
+    acc[sucursalId].total_tarjeta += parseFloat(venta.venta_tarjeta) || 0;
+    acc[sucursalId].total_sinpe += parseFloat(venta.venta_sinpe) || 0;
+    acc[sucursalId].total_ventas += parseFloat(venta.venta_total) || 0;
+    acc[sucursalId].cantidad_registros += 1;
+    return acc;
+  }, {});
+
+  // Convertir a array y ordenar por sucursal_nombre
+  const groupedVentasArray = Object.values(groupedVentas).sort((a, b) =>
+    a.sucursal_nombre.localeCompare(b.sucursal_nombre)
+  );
+
   // Paginación
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredVentas.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredVentas.length / itemsPerPage);
+  const currentItems = groupedVentasArray.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(groupedVentasArray.length / itemsPerPage);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -239,10 +270,36 @@ const handleGenerateWeeklyBySucursal = async () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validar campos completos
+    if (!formData.sucursal_id || !formData.sucursal_id.trim()) {
+      alert('Por favor selecciona una sucursal');
+      return;
+    }
+
+    if (!formData.fecha_venta || !formData.fecha_venta.trim()) {
+      alert('Por favor selecciona una fecha de venta');
+      return;
+    }
+
+    // Validar que al menos uno de los montos esté completo
+    const efectivo = parseFloat(formData.venta_efectivo) || 0;
+    const tarjeta = parseFloat(formData.venta_tarjeta) || 0;
+    const sinpe = parseFloat(formData.venta_sinpe) || 0;
+
+    if (efectivo === 0 && tarjeta === 0 && sinpe === 0) {
+      alert('Por favor ingresa al menos un monto de venta (Efectivo, Tarjeta o SINPE)');
+      return;
+    }
+
+    if (!formData.estado || !formData.estado.trim()) {
+      alert('Por favor selecciona un estado para la venta');
+      return;
+    }
+
     try {
       const url = editingItem
-    ? `${API_BASE_URL}/ventas-diarias/${editingItem.id}`
-    : `${API_BASE_URL}/ventas-diarias`;
+        ? `${API_BASE_URL}/ventas-diarias/${editingItem.id}`
+        : `${API_BASE_URL}/ventas-diarias`;
 
       const method = editingItem ? 'PUT' : 'POST';
 
@@ -258,13 +315,15 @@ const handleGenerateWeeklyBySucursal = async () => {
         await fetchVentas();
         await fetchEstadisticas();
         resetForm();
+        // Mostrar mensaje de éxito
+        alert(editingItem ? 'Venta actualizada exitosamente' : 'Venta registrada exitosamente');
       } else {
         const error = await response.json();
         alert(error.message || 'Error al guardar venta');
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al guardar venta');
+      alert('Error al guardar venta. Por favor intenta nuevamente.');
     }
   };
 
@@ -285,11 +344,11 @@ const handleGenerateWeeklyBySucursal = async () => {
   const handleEdit = (item) => {
     setEditingItem(item);
     setFormData({
-      sucursal_id: item.sucursal_id,
-      fecha_venta: item.fecha_venta,
-      venta_efectivo: item.venta_efectivo,
-      venta_tarjeta: item.venta_tarjeta,
-      venta_sinpe: item.venta_sinpe,
+      sucursal_id: String(item.sucursal_id), // Convertir a string para que coincida con el select
+      fecha_venta: item.fecha_venta, // La fecha se cargará correctamente
+      venta_efectivo: item.venta_efectivo || '',
+      venta_tarjeta: item.venta_tarjeta || '',
+      venta_sinpe: item.venta_sinpe || '',
       observaciones: item.observaciones || '',
       estado: item.estado
     });
@@ -694,168 +753,196 @@ const handleGenerateWeeklyBySucursal = async () => {
               </div>
             )}
 
-            {/* Tabla de ventas */}
+            {/* Tabla de ventas agrupadas por sucursal */}
             {!showWeeklyView && (
-              <div className="card border-0 shadow-sm">
-                <div className="card-body p-0">
-                  <div className="table-responsive">
-                    <table className="table table-hover mb-0">
-                      <thead className="bg-light">
-                        <tr>
-                          <th className="border-0 fw-medium text-muted small px-4 py-3">Sucursal</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Fecha</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Efectivo</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Tarjeta</th>
-                          <th className="border-0 fw-medium text-muted small py-3">SINPE</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Total</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Estado</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentItems.length > 0 ? (
-                          currentItems.map((item) => (
-                            <tr key={item.id}>
-                              <td className="px-4 py-3">
-                                <div>
-                                  <div className="fw-medium text-dark">{item.sucursal_nombre}</div>
-                                  <div className="small">
-                                    <span className={`badge ${getTipoBadgeClass(item.sucursal_tipo)} me-1`}>
-                                      {item.sucursal_tipo}
-                                    </span>
-                                    <span className="text-muted">{item.sucursal_ubicacion}</span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3">
-                                <div className="text-dark">{formatDate(item.fecha_venta)}</div>
-                              </td>
-                              <td className="py-3">
-                                <div className="text-dark fw-medium">{formatCurrency(item.venta_efectivo)}</div>
-                              </td>
-                              <td className="py-3">
-                                <div className="text-dark fw-medium">{formatCurrency(item.venta_tarjeta)}</div>
-                              </td>
-                              <td className="py-3">
-                                <div className="text-dark fw-medium">{formatCurrency(item.venta_sinpe)}</div>
-                              </td>
-                              <td className="py-3">
-                                <div className="text-dark fw-bold">{formatCurrency(item.venta_total)}</div>
-                              </td>
-                              <td className="py-3">
-                                <div className="dropdown">
-                                  <span
-                                    className={`badge ${getStatusBadgeClass(item.estado)} dropdown-toggle`}
-                                    style={{ cursor: 'pointer' }}
-                                    data-bs-toggle="dropdown"
-                                  >
-                                    {item.estado}
-                                  </span>
-                                  <ul className="dropdown-menu">
-                                    <li>
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={() => handleChangeStatus(item.id, 'pendiente')}
-                                      >
-                                        Pendiente
-                                      </button>
-                                    </li>
-                                    <li>
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={() => handleChangeStatus(item.id, 'confirmada')}
-                                      >
-                                        Confirmada
-                                      </button>
-                                    </li>
-                                    <li>
-                                      <button
-                                        className="dropdown-item"
-                                        onClick={() => handleChangeStatus(item.id, 'cerrada')}
-                                      >
-                                        Cerrada
-                                      </button>
-                                    </li>
-                                  </ul>
-                                </div>
-                              </td>
-                              <td className="py-3">
-                                <div className="d-flex gap-2">
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => handleEdit(item)}
-                                    title="Editar"
-                                  >
-                                    <i className="fas fa-edit"></i>
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-outline-danger"
-                                    onClick={() => handleDelete(item.id)}
-                                    title="Eliminar"
-                                  >
-                                    <i className="fas fa-trash"></i>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="8" className="text-center py-5">
-                              <div className="text-muted">
-                                <i className="fas fa-inbox fa-3x mb-3 text-muted opacity-50"></i>
-                                <div>No se encontraron registros de ventas</div>
+              <>
+                {currentItems.length > 0 ? (
+                  currentItems.map((sucursalGroup) => (
+                    <div key={sucursalGroup.sucursal_id} className="card border-0 shadow-sm mb-4">
+                      {/* Header de sucursal con totales */}
+                      <div className="card-header bg-light border-0">
+                        <div className="row align-items-center">
+                          <div className="col-md-4">
+                            <h6 className="mb-1 fw-bold text-dark">
+                              {sucursalGroup.sucursal_nombre}
+                            </h6>
+                            <div className="small">
+                              <span className={`badge ${getTipoBadgeClass(sucursalGroup.sucursal_tipo)} me-2`}>
+                                {sucursalGroup.sucursal_tipo}
+                              </span>
+                              <span className="text-muted">{sucursalGroup.sucursal_ubicacion}</span>
+                            </div>
+                          </div>
+                          <div className="col-md-8">
+                            <div className="row text-center">
+                              <div className="col-md-3">
+                                <small className="text-muted d-block">Efectivo</small>
+                                <strong className="text-primary-green">{formatCurrency(sucursalGroup.total_efectivo)}</strong>
                               </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Paginación */}
-                  {totalPages > 1 && (
-                    <div className="card-footer bg-light border-0">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="text-muted small">
-                          Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, filteredVentas.length)} de {filteredVentas.length} registros
+                              <div className="col-md-3">
+                                <small className="text-muted d-block">Tarjeta</small>
+                                <strong className="text-primary-orange">{formatCurrency(sucursalGroup.total_tarjeta)}</strong>
+                              </div>
+                              <div className="col-md-3">
+                                <small className="text-muted d-block">SINPE</small>
+                                <strong className="text-primary-blue">{formatCurrency(sucursalGroup.total_sinpe)}</strong>
+                              </div>
+                              <div className="col-md-3">
+                                <small className="text-muted d-block">Total ({sucursalGroup.cantidad_registros})</small>
+                                <strong className="text-primary-purple">{formatCurrency(sucursalGroup.total_ventas)}</strong>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <nav>
-                          <ul className="pagination pagination-sm mb-0">
-                            <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                              <button
-                                className="page-link"
-                                onClick={() => setCurrentPage(currentPage - 1)}
-                                disabled={currentPage === 1}
-                              >
-                                Anterior
-                              </button>
-                            </li>
-                            {[...Array(totalPages)].map((_, index) => (
-                              <li key={index + 1} className={`page-item ${currentPage === index + 1 ? 'active' : ''}`}>
-                                <button
-                                  className="page-link"
-                                  onClick={() => setCurrentPage(index + 1)}
-                                >
-                                  {index + 1}
-                                </button>
-                              </li>
-                            ))}
-                            <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                              <button
-                                className="page-link"
-                                onClick={() => setCurrentPage(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                              >
-                                Siguiente
-                              </button>
-                            </li>
-                          </ul>
-                        </nav>
+                      </div>
+
+                      {/* Tabla de ventas individuales */}
+                      <div className="card-body p-0">
+                        <div className="table-responsive">
+                          <table className="table table-hover mb-0">
+                            <thead className="bg-light">
+                              <tr>
+                                <th className="border-0 fw-medium text-muted small px-4 py-3">Fecha</th>
+                                <th className="border-0 fw-medium text-muted small py-3">Efectivo</th>
+                                <th className="border-0 fw-medium text-muted small py-3">Tarjeta</th>
+                                <th className="border-0 fw-medium text-muted small py-3">SINPE</th>
+                                <th className="border-0 fw-medium text-muted small py-3">Total</th>
+                                <th className="border-0 fw-medium text-muted small py-3">Estado</th>
+                                <th className="border-0 fw-medium text-muted small py-3">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sucursalGroup.ventas.map((venta) => (
+                                <tr key={venta.id}>
+                                  <td className="px-4 py-3">
+                                    <div className="text-dark">{formatDate(venta.fecha_venta)}</div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="text-dark fw-medium">{formatCurrency(venta.venta_efectivo)}</div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="text-dark fw-medium">{formatCurrency(venta.venta_tarjeta)}</div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="text-dark fw-medium">{formatCurrency(venta.venta_sinpe)}</div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="text-dark fw-bold">{formatCurrency(venta.venta_total)}</div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="dropdown">
+                                      <span
+                                        className={`badge ${getStatusBadgeClass(venta.estado)} dropdown-toggle`}
+                                        style={{ cursor: 'pointer' }}
+                                        data-bs-toggle="dropdown"
+                                      >
+                                        {venta.estado}
+                                      </span>
+                                      <ul className="dropdown-menu">
+                                        <li>
+                                          <button
+                                            className="dropdown-item"
+                                            onClick={() => handleChangeStatus(venta.id, 'pendiente')}
+                                          >
+                                            Pendiente
+                                          </button>
+                                        </li>
+                                        <li>
+                                          <button
+                                            className="dropdown-item"
+                                            onClick={() => handleChangeStatus(venta.id, 'confirmada')}
+                                          >
+                                            Confirmada
+                                          </button>
+                                        </li>
+                                        <li>
+                                          <button
+                                            className="dropdown-item"
+                                            onClick={() => handleChangeStatus(venta.id, 'cerrada')}
+                                          >
+                                            Cerrada
+                                          </button>
+                                        </li>
+                                      </ul>
+                                    </div>
+                                  </td>
+                                  <td className="py-3">
+                                    <div className="d-flex gap-2">
+                                      <button
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => handleEdit(venta)}
+                                        title="Editar"
+                                      >
+                                        <i className="fas fa-edit"></i>
+                                      </button>
+                                      <button
+                                        className="btn btn-sm btn-outline-danger"
+                                        onClick={() => handleDelete(venta.id)}
+                                        title="Eliminar"
+                                      >
+                                        <i className="fas fa-trash"></i>
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
-                  )}
+                  ))
+                ) : (
+                  <div className="card border-0 shadow-sm">
+                    <div className="card-body text-center py-5">
+                      <div className="text-muted">
+                        <i className="fas fa-inbox fa-3x mb-3 text-muted opacity-50"></i>
+                        <div>No se encontraron registros de ventas</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Paginación */}
+            {!showWeeklyView && totalPages > 1 && (
+              <div className="d-flex justify-content-between align-items-center mt-4">
+                <div className="text-muted small">
+                  Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, groupedVentasArray.length)} de {groupedVentasArray.length} sucursales
                 </div>
+                <nav>
+                  <ul className="pagination pagination-sm mb-0">
+                    <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        Anterior
+                      </button>
+                    </li>
+                    {[...Array(totalPages)].map((_, index) => (
+                      <li key={index + 1} className={`page-item ${currentPage === index + 1 ? 'active' : ''}`}>
+                        <button
+                          className="page-link"
+                          onClick={() => setCurrentPage(index + 1)}
+                        >
+                          {index + 1}
+                        </button>
+                      </li>
+                    ))}
+                    <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                      <button
+                        className="page-link"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        Siguiente
+                      </button>
+                    </li>
+                  </ul>
+                </nav>
               </div>
             )}
           </div>

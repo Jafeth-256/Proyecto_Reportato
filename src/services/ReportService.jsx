@@ -199,113 +199,185 @@ class ReportService {
   }
 
   generateDailyReport(ventas, estadisticas, filters = {}) {
-  this.initDocument();
+    this.initDocument();
 
-  // Header
-  this.addHeader('REPORTE DE VENTAS DIARIAS', 'Detalle de ventas por día', filters);
+    // Header
+    this.addHeader('REPORTE DE VENTAS DIARIAS - AGRUPADO POR SUCURSAL', 'Detalle de ventas agrupadas por sucursal', filters);
 
-  // Estadísticas (totales generales)
-  this.doc.setFontSize(14);
-  this.doc.setFont('helvetica', 'bold');
-  this.doc.setTextColor(this.colors.dark);
-  this.doc.text(`Resumen General`, 20, this.currentY);
-  this.currentY += 10;
+    // Estadísticas (totales generales)
+    this.doc.setFontSize(14);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text(`Resumen General`, 20, this.currentY);
+    this.currentY += 10;
 
-  const statsData = [
-    ['Concepto', 'Monto'],
-    ['Total Ventas', this.formatCurrency(estadisticas.total_ventas)],
-    ['Efectivo', this.formatCurrency(estadisticas.total_efectivo)],
-    ['Tarjeta', this.formatCurrency(estadisticas.total_tarjeta)],
-    ['SINPE', this.formatCurrency(estadisticas.total_sinpe)]
-  ];
+    const statsData = [
+      ['Concepto', 'Monto'],
+      ['Total Ventas', this.formatCurrency(estadisticas.total_ventas)],
+      ['Efectivo', this.formatCurrency(estadisticas.total_efectivo)],
+      ['Tarjeta', this.formatCurrency(estadisticas.total_tarjeta)],
+      ['SINPE', this.formatCurrency(estadisticas.total_sinpe)]
+    ];
 
-  autoTable(this.doc, {
-    head: [statsData[0]],
-    body: statsData.slice(1),
-    startY: this.currentY,
-    theme: 'grid',
-    headStyles: {
-      fillColor: [46, 125, 50],
-      textColor: 255,
-      fontStyle: 'bold'
-    },
-    bodyStyles: {
-      textColor: [33, 37, 41],
-      fontSize: 9
-    },
-    styles: {
-      overflow: 'linebreak',
-      cellPadding: 2
-    },
-    margin: { left: 20, right: 20 }
-  });
+    autoTable(this.doc, {
+      head: [statsData[0]],
+      body: statsData.slice(1),
+      startY: this.currentY,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [46, 125, 50],
+        textColor: 255,
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        textColor: [33, 37, 41],
+        fontSize: 9
+      },
+      styles: {
+        overflow: 'linebreak',
+        cellPadding: 2
+      },
+      margin: { left: 20, right: 20 }
+    });
 
-  this.currentY = this.doc.lastAutoTable.finalY + 10;
+    this.currentY = this.doc.lastAutoTable.finalY + 15;
 
-  // Verificar si hay ventas
-  if (!ventas || ventas.length === 0) {
-    this.doc.setFontSize(12);
-    this.doc.setTextColor(this.colors.secondary);
-    this.doc.text('No se encontraron registros para los filtros aplicados.', 20, this.currentY);
+    // Verificar si hay ventas
+    if (!ventas || ventas.length === 0) {
+      this.doc.setFontSize(12);
+      this.doc.setTextColor(this.colors.secondary);
+      this.doc.text('No se encontraron registros para los filtros aplicados.', 20, this.currentY);
+      return this.doc;
+    }
+
+    // Agrupar ventas por sucursal
+    const ventasPorSucursal = ventas.reduce((acc, venta) => {
+      const key = venta.sucursal_id;
+      if (!acc[key]) {
+        acc[key] = {
+          sucursal_nombre: venta.sucursal_nombre,
+          sucursal_tipo: venta.sucursal_tipo,
+          sucursal_ubicacion: venta.sucursal_ubicacion,
+          ventas: [],
+          total_efectivo: 0,
+          total_tarjeta: 0,
+          total_sinpe: 0,
+          total_ventas: 0
+        };
+      }
+      acc[key].ventas.push(venta);
+      acc[key].total_efectivo += parseFloat(venta.venta_efectivo) || 0;
+      acc[key].total_tarjeta += parseFloat(venta.venta_tarjeta) || 0;
+      acc[key].total_sinpe += parseFloat(venta.venta_sinpe) || 0;
+      acc[key].total_ventas += parseFloat(venta.venta_total) || 0;
+      return acc;
+    }, {});
+
+    // Procesar cada sucursal
+    Object.values(ventasPorSucursal).forEach((grupo) => {
+      // Header de sucursal
+      this.doc.setFontSize(12);
+      this.doc.setFont('helvetica', 'bold');
+      this.doc.setTextColor(this.colors.primary);
+      this.doc.text(`Sucursal: ${grupo.sucursal_nombre} (${grupo.sucursal_tipo})`, 20, this.currentY);
+      this.currentY += 6;
+
+      this.doc.setFontSize(10);
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.setTextColor(this.colors.secondary);
+      this.doc.text(`Ubicación: ${grupo.sucursal_ubicacion}`, 20, this.currentY);
+      this.currentY += 8;
+
+      // Subtotales de la sucursal
+      const subtotalesData = [
+        ['Concepto', 'Monto'],
+        ['Total Efectivo', this.formatCurrency(grupo.total_efectivo)],
+        ['Total Tarjeta', this.formatCurrency(grupo.total_tarjeta)],
+        ['Total SINPE', this.formatCurrency(grupo.total_sinpe)],
+        ['TOTAL SUCURSAL', this.formatCurrency(grupo.total_ventas)]
+      ];
+
+      autoTable(this.doc, {
+        head: [subtotalesData[0]],
+        body: subtotalesData.slice(1),
+        startY: this.currentY,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [123, 31, 162],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [33, 37, 41]
+        },
+        styles: {
+          overflow: 'linebreak',
+          cellPadding: 2
+        },
+        columnStyles: {
+          1: { halign: 'right', fontStyle: 'bold' }
+        },
+        margin: { left: 20, right: 20 }
+      });
+
+      this.currentY = this.doc.lastAutoTable.finalY + 8;
+
+      // Tabla de ventas individuales de la sucursal
+      const tableData = grupo.ventas.map(v => [
+        this.formatDate(v.fecha_venta),
+        this.formatCurrency(v.venta_efectivo),
+        this.formatCurrency(v.venta_tarjeta),
+        this.formatCurrency(v.venta_sinpe),
+        this.formatCurrency(v.venta_total),
+        this.capitalizeFirst(v.estado)
+      ]);
+
+      autoTable(this.doc, {
+        head: [['Fecha', 'Efectivo', 'Tarjeta', 'SINPE', 'Total', 'Estado']],
+        body: tableData,
+        startY: this.currentY,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [46, 125, 50],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [33, 37, 41]
+        },
+        styles: {
+          overflow: 'linebreak',
+          cellPadding: 2
+        },
+        columnStyles: {
+          1: { halign: 'right' },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right', fontStyle: 'bold' },
+          5: { halign: 'center' }
+        },
+        margin: { left: 20, right: 20 },
+        alternateRowStyles: {
+          fillColor: [248, 249, 250]
+        }
+      });
+
+      this.currentY = this.doc.lastAutoTable.finalY + 15;
+
+      // Verificar si necesitamos nueva página
+      if (this.currentY > this.doc.internal.pageSize.height - 30) {
+        this.doc.addPage();
+        this.currentY = 20;
+      }
+    });
+
+    this.addFooter();
     return this.doc;
   }
-
-  // Tabla de ventas
-  this.doc.setFontSize(14);
-  this.doc.setFont('helvetica', 'bold');
-  this.doc.setTextColor(this.colors.dark);
-  this.doc.text('Detalle de Ventas', 20, this.currentY);
-  this.currentY += 8;
-
-  const tableData = ventas.map(v => [
-    v.sucursal_nombre,
-    v.sucursal_tipo,
-    this.formatDate(v.fecha_venta),
-    this.formatCurrency(v.venta_efectivo),
-    this.formatCurrency(v.venta_tarjeta),
-    this.formatCurrency(v.venta_sinpe),
-    this.formatCurrency(v.venta_total),
-    this.capitalizeFirst(v.estado)
-  ]);
-
-  autoTable(this.doc, {
-    head: [['Sucursal', 'Tipo', 'Fecha', 'Efectivo', 'Tarjeta', 'SINPE', 'Total', 'Estado']],
-    body: tableData,
-    startY: this.currentY,
-    theme: 'striped',
-    headStyles: {
-      fillColor: [46, 125, 50],
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 9
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: [33, 37, 41]
-    },
-    styles: {
-      overflow: 'linebreak',
-      cellPadding: 2
-    },
-    columnStyles: {
-      0: { cellWidth: 'wrap' },
-      1: { cellWidth: 'wrap' },
-      2: { cellWidth: 'wrap' },
-      3: { halign: 'right' },
-      4: { halign: 'right' },
-      5: { halign: 'right' },
-      6: { halign: 'right', fontStyle: 'bold' },
-      7: { halign: 'center' }
-    },
-    margin: { left: 20, right: 20 },
-    alternateRowStyles: {
-      fillColor: [248, 249, 250]
-    }
-  });
-
-  this.addFooter();
-  return this.doc;
-}
 
 generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
   this.initDocument();

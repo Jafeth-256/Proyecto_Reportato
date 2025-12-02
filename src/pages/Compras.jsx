@@ -8,6 +8,7 @@ const Compras = () => {
     const [compras, setCompras] = useState([]);
     const [productos, setProductos] = useState([]);
     const [proveedores, setProveedores] = useState([]);
+    const [usuarios, setUsuarios] = useState([]);
     const [usuario, setUsuario] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [editingCompra, setEditingCompra] = useState(null);
@@ -15,6 +16,7 @@ const Compras = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(5);
     const [loading, setLoading] = useState(true);
+    const [inventario, setInventario] = useState([]);
         
     const [formData, setFormData] = useState({
         proveedor: '',
@@ -29,8 +31,36 @@ const Compras = () => {
         fetchCompras();
         fetchProductos();
         fetchProveedores();
+        fetchUsuarios();
         fetchUsuario();
+        cargarInventario();
     }, []);
+
+    // Función para obtener lista de usuarios
+    const fetchUsuarios = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/usuarios`);
+            if (response.ok) {
+                const data = await response.json();
+                setUsuarios(data);
+            }
+        } catch (error) {
+            console.error('Error al obtener usuarios:', error);
+        }
+    };
+
+    // Función para cargar inventario al iniciar
+    const cargarInventario = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/inventario`);
+            if (response.ok) {
+                const data = await response.json();
+                setInventario(data);
+            }
+        } catch (error) {
+            console.error('Error al cargar inventario:', error);
+        }
+    };
 
     // Función para obtener el usuario actual automáticamente
     const fetchUsuario = async () => {
@@ -130,6 +160,11 @@ const Compras = () => {
         return producto ? producto.nombre : '';
     };
 
+    const getUsuarioNombre = (usuario_id) => {
+        const usr = usuarios.find(u => u.id === parseInt(usuario_id));
+        return usr ? usr.nombre : '';
+    };
+
     // Filtrar compras por búsqueda
     const filteredCompras = compras.filter(compra =>
         getProveedorNombre(compra.proveedor_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -173,7 +208,7 @@ const Compras = () => {
         }
 
         // Validar que todos los campos estén completos
-        if (!formData.proveedor || !formData.fecha || !formData.producto || 
+        if (!formData.proveedor || !formData.fecha || !formData.producto ||
             !formData.precio || !formData.cantidad) {
             alert('Por favor completa todos los campos obligatorios.');
             return;
@@ -183,6 +218,7 @@ const Compras = () => {
             // Estructura de datos que coincide con lo que espera el backend
             const submitData = {
                 usuario: parseInt(usuario.id),        // El backend espera 'usuario'
+                usuario_nombre: usuario.nombre,       // Guardar el nombre también
                 proveedor: parseInt(formData.proveedor),  // El backend espera 'proveedor'
                 fecha: formData.fecha,               // El backend espera 'fecha'
                 producto: parseInt(formData.producto),    // El backend espera 'producto'
@@ -196,9 +232,9 @@ const Compras = () => {
             const url = editingCompra
             ? `${API_BASE_URL}/compras/${editingCompra.id}`
             : `${API_BASE_URL}/compras`;
-            
+
             const method = editingCompra ? 'PUT' : 'POST';
-            
+
             const response = await fetch(url, {
                 method: method,
                 headers: {
@@ -209,6 +245,10 @@ const Compras = () => {
 
             if (response.ok) {
                 console.log('Compra guardada exitosamente');
+
+                // Actualizar el inventario automáticamente
+                await actualizarInventario(submitData);
+
                 await fetchCompras();
                 resetForm();
             } else {
@@ -219,6 +259,91 @@ const Compras = () => {
         } catch (error) {
             console.error('Error de red:', error);
             alert('Error de conexión. Por favor intenta nuevamente.');
+        }
+    };
+
+    // Nueva función para actualizar o crear inventario
+    const actualizarInventario = async (compraData) => {
+        try {
+            const productoId = compraData.producto;
+            const cantidad = compraData.cantidad;
+            const precioUnitario = compraData.precio;
+
+            // Obtener inventario fresco desde la API
+            const inventarioResponse = await fetch(`${API_BASE_URL}/inventario`);
+            let inventarioFresco = [];
+            if (inventarioResponse.ok) {
+                inventarioFresco = await inventarioResponse.json();
+            }
+
+            // Buscar si ya existe el producto en el inventario
+            const inventarioExistente = inventarioFresco.find(item =>
+                item.producto_id == productoId || parseInt(item.producto_id) === parseInt(productoId)
+            );
+
+            if (inventarioExistente) {
+                // Si existe, sumar la cantidad
+                const nuevoStock = parseInt(inventarioExistente.stock_actual) + parseInt(cantidad);
+
+                const updateData = {
+                    stock_actual: nuevoStock,
+                    precio_unitario: precioUnitario,
+                    fecha_ingreso: inventarioExistente.fecha_ingreso
+                };
+
+                await fetch(
+                    `${API_BASE_URL}/inventario/${inventarioExistente.id}`,
+                    {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(updateData),
+                    }
+                );
+            } else {
+                // Si no existe, crear un nuevo registro de inventario
+                const nuevoInventario = {
+                    producto_id: productoId,
+                    stock_actual: cantidad,
+                    stock_minimo: 10,
+                    precio_unitario: precioUnitario,
+                    fecha_ingreso: new Date().toISOString().split('T')[0],
+                    fecha_vencimiento: '',
+                    estado: 'Disponible'
+                };
+
+                await fetch(
+                    `${API_BASE_URL}/inventario`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(nuevoInventario),
+                    }
+                );
+            }
+
+            // Recargar el inventario para mantener sincronizado
+            await fetchInventario();
+        } catch (error) {
+            console.error('Error al actualizar inventario:', error);
+        }
+    };
+
+    // Nueva función para obtener el inventario
+    const fetchInventario = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/inventario`);
+            if (response.ok) {
+                const data = await response.json();
+                // Actualizar el estado con los datos del inventario
+                setInventario(data);
+                return data;
+            }
+        } catch (error) {
+            console.error('Error al obtener inventario:', error);
         }
     };
 
@@ -448,7 +573,7 @@ const Compras = () => {
                                             {currentCompras.map((item) => (
                                                 <tr key={item.id}>
                                                     <td className="px-4 py-3">
-                                                        <div className="fw-medium text-dark">{item.usuario || 'Usuario'}</div>
+                                                        <div className="fw-medium text-dark">{item.usuario_nombre || getUsuarioNombre(item.usuario) || 'Usuario'}</div>
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className="text-muted">{getProveedorNombre(item.proveedor_id)}</span>
