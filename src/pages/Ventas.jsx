@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
 import API_BASE_URL from '../config/api';
+import * as XLSX from 'xlsx';
 
 const VentasDiarias = () => {
   const [ventas, setVentas] = useState([]);
@@ -11,20 +12,18 @@ const VentasDiarias = () => {
   const [estadisticas, setEstadisticas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(8);
-  const [filtroFecha, setFiltroFecha] = useState('');
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
+  const [filtroFechaFin, setFiltroFechaFin] = useState('');
   const [filtroSucursal, setFiltroSucursal] = useState('');
-  const [showWeeklyView, setShowWeeklyView] = useState(false);
-  const { generateDailyReport, generateWeeklyReport, isGenerating, error, clearError } = useReports();
-  const { generateWeeklyReportBySucursal } = useReports();
-
-const handleGenerateWeeklyBySucursal = async () => {
-  if (!ventas || ventas.length === 0) return;
-  await generateWeeklyReportBySucursal(ventas);
-};
+  const [importingFile, setImportingFile] = useState(false);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importErrors, setImportErrors] = useState([]);
+  const { generateDailyReport, isGenerating, error, clearError } = useReports();
 
 
   const [formData, setFormData] = useState({
@@ -37,22 +36,21 @@ const handleGenerateWeeklyBySucursal = async () => {
     estado: 'pendiente'
   });
 
-  // Cargar datos desde la API
-  useEffect(() => {
-    fetchVentas();
-    fetchSucursales();
-    fetchEstadisticas();
-  }, [filtroFecha, filtroSucursal]);
-
-  const fetchVentas = async () => {
+  const fetchVentas = useCallback(async () => {
     try {
       setLoading(true);
       let url = `${API_BASE_URL}/ventas-diarias`;
       const params = new URLSearchParams();
 
-      if (filtroFecha) {
-        params.append('fecha_inicio', filtroFecha);
-        params.append('fecha_fin', filtroFecha);
+      if (filtroFechaInicio) {
+        params.append('fecha_inicio', filtroFechaInicio);
+      }
+      if (filtroFechaFin) {
+        // Agregar 1 día para incluir todo el día final (fecha_fin <= fecha_venta)
+        const fechaFin = new Date(filtroFechaFin);
+        fechaFin.setDate(fechaFin.getDate() + 1);
+        const fechaFinAjustada = fechaFin.toISOString().split('T')[0];
+        params.append('fecha_fin', fechaFinAjustada);
       }
       if (filtroSucursal) {
         params.append('sucursal_id', filtroSucursal);
@@ -74,7 +72,7 @@ const handleGenerateWeeklyBySucursal = async () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtroFechaInicio, filtroFechaFin, filtroSucursal]);
 
   const fetchSucursales = async () => {
     try {
@@ -90,14 +88,20 @@ const handleGenerateWeeklyBySucursal = async () => {
     }
   };
 
-  const fetchEstadisticas = async () => {
+  const fetchEstadisticas = useCallback(async () => {
     try {
       let url = `${API_BASE_URL}/ventas-diarias/estadisticas`;
       const params = new URLSearchParams();
 
-      if (filtroFecha) {
-        params.append('fecha_inicio', filtroFecha);
-        params.append('fecha_fin', filtroFecha);
+      if (filtroFechaInicio) {
+        params.append('fecha_inicio', filtroFechaInicio);
+      }
+      if (filtroFechaFin) {
+        // Agregar 1 día para incluir todo el día final (fecha_fin <= fecha_venta)
+        const fechaFin = new Date(filtroFechaFin);
+        fechaFin.setDate(fechaFin.getDate() + 1);
+        const fechaFinAjustada = fechaFin.toISOString().split('T')[0];
+        params.append('fecha_fin', fechaFinAjustada);
       }
 
       if (params.toString()) {
@@ -112,104 +116,28 @@ const handleGenerateWeeklyBySucursal = async () => {
     } catch (error) {
       console.error('Error al obtener estadísticas:', error);
     }
-  };
+  }, [filtroFechaInicio, filtroFechaFin]);
 
-  const processWeeklyData = (ventasData) => {
-    const weeklyData = {};
+  // Cargar datos desde la API
+  useEffect(() => {
+    fetchVentas();
+    fetchSucursales();
+    fetchEstadisticas();
+  }, [fetchVentas, fetchEstadisticas]);
 
-    ventasData.forEach(venta => {
-      const fecha = new Date(venta.fecha_venta);
-      const year = fecha.getFullYear();
-      const startOfWeek = new Date(fecha);
-      startOfWeek.setDate(fecha.getDate() - fecha.getDay());
-
-      const weekKey = `${year}-W${Math.ceil((startOfWeek.getTime() - new Date(year, 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}`;
-
-      if (!weeklyData[weekKey]) {
-        weeklyData[weekKey] = {
-          numero_semana: Math.ceil((startOfWeek.getTime() - new Date(year, 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)),
-          fecha_inicio: startOfWeek.toISOString().split('T')[0],
-          fecha_fin: new Date(startOfWeek.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          sucursales: {},
-          total_efectivo: 0,
-          total_tarjeta: 0,
-          total_sinpe: 0,
-          total_ventas: 0
-        };
-      }
-
-      const week = weeklyData[weekKey];
-
-      // Agrupar por sucursal si no hay filtro, o mantener total general
-      if (!filtroSucursal) {
-        if (!week.sucursales[venta.sucursal_id]) {
-          week.sucursales[venta.sucursal_id] = {
-            sucursal_nombre: venta.sucursal_nombre,
-            sucursal_tipo: venta.sucursal_tipo,
-            total_efectivo: 0,
-            total_tarjeta: 0,
-            total_sinpe: 0,
-            total_ventas: 0
-          };
-        }
-
-        week.sucursales[venta.sucursal_id].total_efectivo += parseFloat(venta.venta_efectivo || 0);
-        week.sucursales[venta.sucursal_id].total_tarjeta += parseFloat(venta.venta_tarjeta || 0);
-        week.sucursales[venta.sucursal_id].total_sinpe += parseFloat(venta.venta_sinpe || 0);
-        week.sucursales[venta.sucursal_id].total_ventas += parseFloat(venta.venta_total || 0);
-      }
-
-      // Totales generales de la semana
-      week.total_efectivo += parseFloat(venta.venta_efectivo || 0);
-      week.total_tarjeta += parseFloat(venta.venta_tarjeta || 0);
-      week.total_sinpe += parseFloat(venta.venta_sinpe || 0);
-      week.total_ventas += parseFloat(venta.venta_total || 0);
-    });
-
-    return Object.values(weeklyData).sort((a, b) => a.numero_semana - b.numero_semana);
-  };
-
-  const getWeeklyData = () => {
-    return processWeeklyData(ventas);
-  };
-
-  const getWeeklyStats = () => {
-    const weeklyData = getWeeklyData();
-    return weeklyData.reduce((acc, week) => {
-      acc.total_ventas += week.total_ventas;
-      acc.total_efectivo += week.total_efectivo;
-      acc.total_tarjeta += week.total_tarjeta;
-      acc.total_sinpe += week.total_sinpe;
-      return acc;
-    }, {
-      total_ventas: 0,
-      total_efectivo: 0,
-      total_tarjeta: 0,
-      total_sinpe: 0
-    });
-  };
 
   const handleGenerateReport = async () => {
     const filters = {
-      fecha: filtroFecha,
+      fechaInicio: filtroFechaInicio,
+      fechaFin: filtroFechaFin,
       sucursal: filtroSucursal
     };
 
-    let result;
-
-    if (showWeeklyView) {
-      const weeklyData = getWeeklyData();
-      const weeklyStats = getWeeklyStats();
-      result = await generateWeeklyReport(weeklyData, weeklyStats, filters, sucursales);
-    } else {
-      result = await generateDailyReport(ventas, estadisticas, filters, sucursales);
-    }
+    const result = await generateDailyReport(ventas, estadisticas, filters, sucursales);
 
     if (result.success) {
-      // Opcional: mostrar mensaje de éxito
       console.log('Reporte generado exitosamente:', result.filename);
     } else {
-      // Manejar error
       console.error('Error al generar reporte:', result.error);
     }
   };
@@ -395,6 +323,115 @@ const handleGenerateWeeklyBySucursal = async () => {
     }
   };
 
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setImportPreview([]);
+    setImportErrors([]);
+    const fileInput = document.getElementById('fileInputVentas');
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImportingFile(true);
+      setImportErrors([]);
+      setImportPreview([]);
+      const reader = new FileReader();
+
+      reader.onload = async (event) => {
+        try {
+          const data = event.target?.result;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets['ventas'];
+
+          if (!worksheet) {
+            setImportErrors(['No se encontró la hoja "ventas" en el archivo Excel']);
+            setShowImportModal(true);
+            setImportingFile(false);
+            return;
+          }
+
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+            setImportErrors(['El archivo no contiene datos']);
+            setShowImportModal(true);
+            setImportingFile(false);
+            return;
+          }
+
+          setImportErrors([]);
+          setImportPreview(jsonData);
+          setShowImportModal(true);
+          setImportingFile(false);
+        } catch (error) {
+          console.error('Error al procesar archivo:', error);
+          setImportErrors(['Error al procesar el archivo Excel. Asegúrate de que tiene el formato correcto']);
+          setShowImportModal(true);
+          setImportingFile(false);
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error('Error:', error);
+      setImportErrors(['Error al leer el archivo']);
+      setShowImportModal(true);
+      setImportingFile(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    try {
+      setImportingFile(true);
+      let ventasInsertadas = 0;
+      let ventasConError = 0;
+
+      for (const venta of importPreview) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/ventas-diarias`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sucursal_id: venta.sucursal_id,
+              fecha_venta: venta.fecha_venta,
+              venta_efectivo: venta.venta_efectivo || 0,
+              venta_tarjeta: venta.venta_tarjeta || 0,
+              venta_sinpe: venta.venta_sinpe || 0,
+              observaciones: venta.observaciones || '',
+              estado: venta.estado || 'pendiente'
+            }),
+          });
+
+          if (response.ok) {
+            ventasInsertadas++;
+          } else {
+            ventasConError++;
+          }
+        } catch (error) {
+          console.error('Error al insertar venta:', error);
+          ventasConError++;
+        }
+      }
+
+      await fetchVentas();
+      await fetchEstadisticas();
+      setShowImportModal(false);
+      setImportPreview([]);
+      alert(`Importación completada!\n- Ventas insertadas: ${ventasInsertadas}\n- Ventas con error: ${ventasConError}`);
+    } catch (error) {
+      console.error('Error:', error);
+      setImportErrors(['Error al procesar la importación']);
+    } finally {
+      setImportingFile(false);
+    }
+  };
+
   const formatCurrency = (amount) => {
     return `₡${parseFloat(amount || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 })}`;
   };
@@ -460,14 +497,6 @@ const handleGenerateWeeklyBySucursal = async () => {
             <div className="row mb-4">
               <div className="d-flex gap-2">
                 <button
-                  className={`btn ${showWeeklyView ? 'btn-primary-green' : 'btn-outline-primary-green'}`}
-                  onClick={() => setShowWeeklyView(!showWeeklyView)}
-                >
-                  <i className="fas fa-calendar-week me-1"></i>
-                  {showWeeklyView ? 'Vista Diaria' : 'Vista Semanal'}
-                </button>
-
-                <button
                   className="btn btn-outline-primary-green"
                   onClick={handleGenerateReport}
                   disabled={isGenerating}
@@ -485,36 +514,26 @@ const handleGenerateWeeklyBySucursal = async () => {
                   )}
                 </button>
 
-                {/* ✅ Nuevo botón: Exportar por Sucursal */}
-                {showWeeklyView && (
-                  <button
-                    className="btn btn-outline-primary-purple"
-                    onClick={handleGenerateWeeklyBySucursal}
-                    disabled={isGenerating}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                        Generando...
-                      </>
-                    ) : (
-                      <>
-                        <i className="fas fa-file-alt me-1"></i>
-                        Exportar PDF por Sucursal
-                      </>
-                    )}
-                  </button>
-                )}
+                <label className="btn btn-outline-primary-blue m-0">
+                  <i className="fas fa-file-import me-1"></i>
+                  Importar Excel
+                  <input
+                    id="fileInputVentas"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileUpload}
+                    disabled={importingFile}
+                    style={{ display: 'none' }}
+                  />
+                </label>
 
-                {!showWeeklyView && (
-                  <button
-                    className="btn btn-primary-purple"
-                    onClick={() => setShowModal(true)}
-                  >
-                    <i className="fas fa-plus me-1"></i>
-                    Registrar Venta
-                  </button>
-                )}
+                <button
+                  className="btn btn-primary-purple"
+                  onClick={() => setShowModal(true)}
+                >
+                  <i className="fas fa-plus me-1"></i>
+                  Registrar Venta
+                </button>
               </div>
             </div>
 
@@ -533,11 +552,9 @@ const handleGenerateWeeklyBySucursal = async () => {
                         </div>
                         <div className="flex-grow-1 ms-3">
                           <div className="fw-bold text-dark fs-4">
-                            {formatCurrency(showWeeklyView ? getWeeklyStats().total_ventas : estadisticas.total_ventas)}
+                            {formatCurrency(estadisticas.total_ventas)}
                           </div>
-                          <div className="text-muted small">
-                            Total Ventas {showWeeklyView ? '(Semanales)' : ''}
-                          </div>
+                          <div className="text-muted small">Total Ventas</div>
                         </div>
                       </div>
                     </div>
@@ -554,7 +571,7 @@ const handleGenerateWeeklyBySucursal = async () => {
                         </div>
                         <div className="flex-grow-1 ms-3">
                           <div className="fw-bold text-dark fs-4">
-                            {formatCurrency(showWeeklyView ? getWeeklyStats().total_efectivo : estadisticas.total_efectivo)}
+                            {formatCurrency(estadisticas.total_efectivo)}
                           </div>
                           <div className="text-muted small">Efectivo</div>
                         </div>
@@ -573,7 +590,7 @@ const handleGenerateWeeklyBySucursal = async () => {
                         </div>
                         <div className="flex-grow-1 ms-3">
                           <div className="fw-bold text-dark fs-4">
-                            {formatCurrency(showWeeklyView ? getWeeklyStats().total_tarjeta : estadisticas.total_tarjeta)}
+                            {formatCurrency(estadisticas.total_tarjeta)}
                           </div>
                           <div className="text-muted small">Tarjetas</div>
                         </div>
@@ -592,7 +609,7 @@ const handleGenerateWeeklyBySucursal = async () => {
                         </div>
                         <div className="flex-grow-1 ms-3">
                           <div className="fw-bold text-dark fs-4">
-                            {formatCurrency(showWeeklyView ? getWeeklyStats().total_sinpe : estadisticas.total_sinpe)}
+                            {formatCurrency(estadisticas.total_sinpe)}
                           </div>
                           <div className="text-muted small">SINPE</div>
                         </div>
@@ -620,99 +637,37 @@ const handleGenerateWeeklyBySucursal = async () => {
               </div>
             )}
 
-            {/* Tabla de ventas semanales */}
-            {showWeeklyView && (
-              <div className="card border-0 shadow-sm mb-4">
-                <div className="card-header bg-light border-0">
-                  <h5 className="mb-0">
-                    <i className="fas fa-calendar-week text-primary-green me-2"></i>
-                    Ventas Semanales {filtroSucursal && sucursales.find(s => s.id == filtroSucursal) ? `- ${sucursales.find(s => s.id == filtroSucursal).nombre}` : ''}
-                  </h5>
-                </div>
-                <div className="card-body p-0">
-                  <div className="table-responsive">
-                    <table className="table table-hover mb-0">
-                      <thead className="bg-light">
-                        <tr>
-                          <th className="border-0 fw-medium text-muted small px-4 py-3">Semana</th>
-                          {!filtroSucursal && <th className="border-0 fw-medium text-muted small py-3">Sucursales</th>}
-                          <th className="border-0 fw-medium text-muted small py-3">Efectivo</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Tarjeta</th>
-                          <th className="border-0 fw-medium text-muted small py-3">SINPE</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Total</th>
-                          <th className="border-0 fw-medium text-muted small py-3">Promedio Diario</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getWeeklyData().map((week, index) => (
-                          <tr key={index}>
-                            <td className="px-4 py-3">
-                              <div>
-                                <div className="fw-medium text-dark">
-                                  Semana {week.numero_semana}
-                                </div>
-                                <div className="small text-muted">
-                                  {formatDate(week.fecha_inicio)} - {formatDate(week.fecha_fin)}
-                                </div>
-                              </div>
-                            </td>
-                            {!filtroSucursal && (
-                              <td className="py-3">
-                                <div className="d-flex flex-wrap gap-1">
-                                  {Object.values(week.sucursales).map((sucursal, idx) => (
-                                    <span key={idx} className={`badge ${getTipoBadgeClass(sucursal.sucursal_tipo)} small`}>
-                                      {sucursal.sucursal_nombre}
-                                    </span>
-                                  ))}
-                                </div>
-                              </td>
-                            )}
-                            <td className="py-3">
-                              <div className="text-dark fw-medium">{formatCurrency(week.total_efectivo)}</div>
-                            </td>
-                            <td className="py-3">
-                              <div className="text-dark fw-medium">{formatCurrency(week.total_tarjeta)}</div>
-                            </td>
-                            <td className="py-3">
-                              <div className="text-dark fw-medium">{formatCurrency(week.total_sinpe)}</div>
-                            </td>
-                            <td className="py-3">
-                              <div className="text-dark fw-bold">{formatCurrency(week.total_ventas)}</div>
-                            </td>
-                            <td className="py-3">
-                              <div className="text-dark">{formatCurrency(week.total_ventas / 7)}</div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Filtros */}
-            {!showWeeklyView && (
+            {(
               <div className="card border-0 shadow-sm mb-4">
                 <div className="card-body">
                   <div className="row align-items-end">
-                    <div className="col-md-3 mb-3">
-                      <label className="form-label small fw-medium">Filtrar por fecha</label>
+                    <div className="col-md-2 mb-3">
+                      <label className="form-label small fw-medium">Desde</label>
                       <input
                         type="date"
                         className="form-control"
-                        value={filtroFecha}
-                        onChange={(e) => setFiltroFecha(e.target.value)}
+                        value={filtroFechaInicio}
+                        onChange={(e) => setFiltroFechaInicio(e.target.value)}
                       />
                     </div>
-                    <div className="col-md-3 mb-3">
-                      <label className="form-label small fw-medium">Filtrar por sucursal</label>
+                    <div className="col-md-2 mb-3">
+                      <label className="form-label small fw-medium">Hasta</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={filtroFechaFin}
+                        onChange={(e) => setFiltroFechaFin(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-md-2 mb-3">
+                      <label className="form-label small fw-medium">Sucursal</label>
                       <select
                         className="form-select"
                         value={filtroSucursal}
                         onChange={(e) => setFiltroSucursal(e.target.value)}
                       >
-                        <option value="">Todas las sucursales</option>
+                        <option value="">Todas</option>
                         {sucursales.map((sucursal) => (
                           <option key={sucursal.id} value={sucursal.id}>
                             {sucursal.nombre} - {sucursal.tipo}
@@ -739,7 +694,8 @@ const handleGenerateWeeklyBySucursal = async () => {
                       <button
                         className="btn btn-outline-secondary w-100"
                         onClick={() => {
-                          setFiltroFecha('');
+                          setFiltroFechaInicio('');
+                          setFiltroFechaFin('');
                           setFiltroSucursal('');
                           setSearchTerm('');
                         }}
@@ -754,7 +710,7 @@ const handleGenerateWeeklyBySucursal = async () => {
             )}
 
             {/* Tabla de ventas agrupadas por sucursal */}
-            {!showWeeklyView && (
+            {(
               <>
                 {currentItems.length > 0 ? (
                   currentItems.map((sucursalGroup) => (
@@ -906,7 +862,7 @@ const handleGenerateWeeklyBySucursal = async () => {
             )}
 
             {/* Paginación */}
-            {!showWeeklyView && totalPages > 1 && (
+            {totalPages > 1 && (
               <div className="d-flex justify-content-between align-items-center mt-4">
                 <div className="text-muted small">
                   Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, groupedVentasArray.length)} de {groupedVentasArray.length} sucursales
@@ -948,6 +904,117 @@ const handleGenerateWeeklyBySucursal = async () => {
           </div>
         </div>
       </div>
+
+      {/* Modal para importar ventas */}
+      {showImportModal && (
+        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="fas fa-file-import me-2"></i>
+                  Vista Previa de Importación de Ventas
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={closeImportModal}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {importErrors.length > 0 && (
+                  <div className="alert alert-danger mb-3">
+                    <strong>Errores encontrados:</strong>
+                    <ul className="mb-0 mt-2">
+                      {importErrors.map((error, idx) => (
+                        <li key={idx}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {importPreview.length > 0 && (
+                  <>
+                    <p className="text-muted mb-3">
+                      Se encontraron <strong>{importPreview.length}</strong> ventas para importar
+                    </p>
+                    <div className="table-responsive">
+                      <table className="table table-sm table-hover">
+                        <thead className="bg-light">
+                          <tr>
+                            <th>Sucursal ID</th>
+                            <th>Fecha</th>
+                            <th>Efectivo</th>
+                            <th>Tarjeta</th>
+                            <th>SINPE</th>
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.slice(0, 10).map((venta, idx) => (
+                            <tr key={idx}>
+                              <td>{venta.sucursal_id}</td>
+                              <td>{venta.fecha_venta}</td>
+                              <td>{formatCurrency(venta.venta_efectivo || 0)}</td>
+                              <td>{formatCurrency(venta.venta_tarjeta || 0)}</td>
+                              <td>{formatCurrency(venta.venta_sinpe || 0)}</td>
+                              <td>
+                                <span className={`badge ${
+                                  (venta.estado || 'pendiente') === 'pendiente'
+                                    ? 'bg-warning bg-opacity-20 text-warning'
+                                    : (venta.estado || 'pendiente') === 'confirmada'
+                                    ? 'bg-success bg-opacity-20 text-success'
+                                    : 'bg-primary bg-opacity-20 text-primary'
+                                }`}>
+                                  {venta.estado || 'pendiente'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {importPreview.length > 10 && (
+                      <p className="text-muted text-center mt-2">
+                        y {importPreview.length - 10} ventas más...
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeImportModal}
+                  disabled={importingFile}
+                >
+                  Cancelar
+                </button>
+                {importPreview.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={handleConfirmImport}
+                    disabled={importingFile}
+                  >
+                    {importingFile ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Importando...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-check me-1"></i>
+                        Confirmar Importación ({importPreview.length})
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para crear/editar */}
       {showModal && (

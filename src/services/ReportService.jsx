@@ -51,10 +51,34 @@ class ReportService {
       this.currentY += 8;
     }
 
+    // Display filter information
+    let filterText = '';
+    if (filters.fechaInicio && filters.fechaFin) {
+      filterText = `Período: ${filters.fechaInicio} a ${filters.fechaFin}`;
+    } else if (filters.fechaInicio) {
+      filterText = `Desde: ${filters.fechaInicio}`;
+    } else if (filters.fechaFin) {
+      filterText = `Hasta: ${filters.fechaFin}`;
+    } else if (filters.fecha) {
+      filterText = `Fecha: ${filters.fecha}`;
+    }
+
+    if (filters.sucursal) {
+      filterText += filterText ? ` | ${filters.sucursal}` : filters.sucursal;
+    }
+
+    if (filterText) {
+      this.doc.setFontSize(9);
+      this.doc.setFont('helvetica', 'italic');
+      this.doc.setTextColor(this.colors.secondary);
+      this.doc.text(`Filtros: ${filterText}`, 20, this.currentY, { align: 'left' });
+      this.currentY += 6;
+    }
+
     this.doc.setFontSize(10);
     this.doc.setFont('helvetica', 'normal');
     this.doc.setTextColor(this.colors.dark);
-    this.doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, 
+    this.doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`,
                   pageWidth - 20, this.currentY, { align: 'right' });
 
     this.currentY += 10;

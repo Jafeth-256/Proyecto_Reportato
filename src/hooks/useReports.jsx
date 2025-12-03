@@ -13,7 +13,17 @@ const useReports = () => {
       const reportService = new ReportService();
       const processedFilters = {};
 
-      if (filters.fecha) {
+      // Handle date range filters
+      if (filters.fechaInicio) {
+        processedFilters.fechaInicio = new Date(filters.fechaInicio).toLocaleDateString('es-ES');
+      }
+
+      if (filters.fechaFin) {
+        processedFilters.fechaFin = new Date(filters.fechaFin).toLocaleDateString('es-ES');
+      }
+
+      // Fallback for single date filter (for backward compatibility)
+      if (filters.fecha && !filters.fechaInicio && !filters.fechaFin) {
         processedFilters.fecha = new Date(filters.fecha).toLocaleDateString('es-ES');
       }
 

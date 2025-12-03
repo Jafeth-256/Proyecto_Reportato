@@ -534,11 +534,11 @@ const Usuario = () => {
                                 <div className="d-flex gap-2">
                                   {puedeEditar && (
                                     <button
-                                      className="btn btn-sm btn-outline-secondary"
+                                      className="btn btn-sm btn-outline-primary"
                                       onClick={() => handleEdit(usuario)}
                                       title="Editar"
                                     >
-                                      <i className="fa-solid fa-pen"></i>
+                                      <i className="fas fa-edit"></i>
                                     </button>
                                   )}
                                   {puedeEliminar && (

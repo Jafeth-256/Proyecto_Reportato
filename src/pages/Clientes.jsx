@@ -332,11 +332,11 @@ const Clientes = () => {
                             <td>
                               <div className="d-flex gap-2">
                                 <button
-                                  className="btn btn-sm btn-outline-secondary"
+                                  className="btn btn-sm btn-outline-primary"
                                   onClick={() => handleEdit(cliente)}
                                   title="Editar"
                                 >
-                                  <i className="fa-solid fa-pen"></i>
+                                  <i className="fas fa-edit"></i>
                                 </button>
                                 <button
                                   className="btn btn-sm btn-outline-danger"

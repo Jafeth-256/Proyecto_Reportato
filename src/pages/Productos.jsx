@@ -4,16 +4,21 @@ import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import useReports from '../hooks/useReports';
 import API_BASE_URL from '../config/api';
+import * as XLSX from 'xlsx';
 
 const Productos = () => {
   const { generateProductReport, isGenerating } = useReports();
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingProducto, setEditingProducto] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importErrors, setImportErrors] = useState([]);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -141,6 +146,132 @@ const Productos = () => {
     }
   };
 
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setImportPreview([]);
+    setImportErrors([]);
+    // Resetear el input para poder seleccionar el mismo archivo de nuevo
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImportingFile(true);
+      setImportErrors([]);
+      setImportPreview([]);
+      const reader = new FileReader();
+
+      reader.onload = async (event) => {
+        try {
+          const data = event.target?.result;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets['productos'];
+
+          if (!worksheet) {
+            setImportErrors(['No se encontró la hoja "productos" en el archivo Excel']);
+            setShowImportModal(true);
+            setImportingFile(false);
+            return;
+          }
+
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+            setImportErrors(['El archivo no contiene datos']);
+            setShowImportModal(true);
+            setImportingFile(false);
+            return;
+          }
+
+          // Validar duplicados con productos existentes
+          const productosExistentes = productos.map(p => p.nombre.toLowerCase());
+          const productosConDuplicados = [];
+          const productosSinDuplicados = [];
+
+          jsonData.forEach((producto) => {
+            if (productosExistentes.includes(producto.nombre?.toLowerCase())) {
+              productosConDuplicados.push(producto.nombre);
+            } else {
+              productosSinDuplicados.push(producto);
+            }
+          });
+
+          if (productosConDuplicados.length > 0) {
+            setImportErrors([`Se encontraron ${productosConDuplicados.length} producto(s) duplicado(s): ${productosConDuplicados.join(', ')}`]);
+            setImportPreview(productosSinDuplicados);
+          } else {
+            setImportErrors([]);
+            setImportPreview(jsonData);
+          }
+          setShowImportModal(true);
+          setImportingFile(false);
+        } catch (error) {
+          console.error('Error al procesar archivo:', error);
+          setImportErrors(['Error al procesar el archivo Excel. Asegúrate de que tiene el formato correcto']);
+          setShowImportModal(true);
+          setImportingFile(false);
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error('Error:', error);
+      setImportErrors(['Error al leer el archivo']);
+      setShowImportModal(true);
+      setImportingFile(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    try {
+      setImportingFile(true);
+      let productosInsertados = 0;
+      let productosConError = 0;
+
+      // Crear cada producto usando el mismo endpoint que el formulario
+      for (const producto of importPreview) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/productos`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              nombre: producto.nombre,
+              categoria: producto.categoria,
+              unidad_medida: producto.unidad_medida || 'kg',
+              descripcion: producto.descripcion || '',
+              estado: producto.estado || 'Activo'
+            }),
+          });
+
+          if (response.ok) {
+            productosInsertados++;
+          } else {
+            productosConError++;
+          }
+        } catch (error) {
+          console.error('Error al insertar producto:', error);
+          productosConError++;
+        }
+      }
+
+      await fetchProductos();
+      setShowImportModal(false);
+      setImportPreview([]);
+      alert(`Importación completada!\n- Productos insertados: ${productosInsertados}\n- Productos con error: ${productosConError}`);
+    } catch (error) {
+      console.error('Error:', error);
+      setImportErrors(['Error al procesar la importación']);
+    } finally {
+      setImportingFile(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-ES');
   };
@@ -201,7 +332,19 @@ const Productos = () => {
                         </>
                       )}
                     </button>
-                    <button 
+                    <label className="btn btn-outline-primary-blue m-0">
+                      <i className="fas fa-file-import me-1"></i>
+                      Importar Excel
+                      <input
+                        id="fileInput"
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleFileUpload}
+                        disabled={importingFile}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <button
                       className="btn btn-primary-purple"
                       onClick={() => setShowModal(true)}
                     >
@@ -425,6 +568,111 @@ const Productos = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal para importar productos */}
+      {showImportModal && (
+        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="fas fa-file-import me-2"></i>
+                  Vista Previa de Importación
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={closeImportModal}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {importErrors.length > 0 && (
+                  <div className="alert alert-danger mb-3">
+                    <strong>Errores encontrados:</strong>
+                    <ul className="mb-0 mt-2">
+                      {importErrors.map((error, idx) => (
+                        <li key={idx}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {importPreview.length > 0 && (
+                  <>
+                    <p className="text-muted mb-3">
+                      Se encontraron <strong>{importPreview.length}</strong> productos para importar
+                    </p>
+                    <div className="table-responsive">
+                      <table className="table table-sm table-hover">
+                        <thead className="bg-light">
+                          <tr>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Unidad</th>
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.slice(0, 10).map((producto, idx) => (
+                            <tr key={idx}>
+                              <td>{producto.nombre}</td>
+                              <td>{producto.categoria}</td>
+                              <td>{producto.unidad_medida || 'kg'}</td>
+                              <td>
+                                <span className={`badge ${
+                                  (producto.estado || 'Activo') === 'Activo'
+                                    ? 'bg-success bg-opacity-20 text-success'
+                                    : 'bg-danger bg-opacity-20 text-danger'
+                                }`}>
+                                  {producto.estado || 'Activo'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {importPreview.length > 10 && (
+                      <p className="text-muted text-center mt-2">
+                        y {importPreview.length - 10} productos más...
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeImportModal}
+                  disabled={importingFile}
+                >
+                  Cancelar
+                </button>
+                {importPreview.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={handleConfirmImport}
+                    disabled={importingFile}
+                  >
+                    {importingFile ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Importando...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-check me-1"></i>
+                        Confirmar Importación ({importPreview.length})
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para crear/editar producto */}
       {showModal && (

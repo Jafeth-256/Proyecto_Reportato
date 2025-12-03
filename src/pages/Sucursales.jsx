@@ -61,9 +61,9 @@ const Sucursales = () => {
     if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(trimmed)) {
       return 'El nombre debe contener al menos una letra';
     }
-    // Validar caracteres permitidos (letras, números, espacios, guiones)
-    if (!/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\-]+$/.test(trimmed)) {
-      return 'El nombre solo puede contener letras, números, espacios y guiones';
+    // Validar caracteres permitidos (letras, números, espacios, guiones y #)
+    if (!/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\-#]+$/.test(trimmed)) {
+      return 'El nombre solo puede contener letras, números, espacios, guiones y #';
     }
     return '';
   };
@@ -565,7 +565,6 @@ const Sucursales = () => {
                         <th className="border-0 px-4 py-3">Tipo</th>
                         <th className="border-0 px-4 py-3">Ubicación</th>
                         <th className="border-0 px-4 py-3">Estado</th>
-                        <th className="border-0 px-4 py-3">Fecha Creación</th>
                         <th className="border-0 px-4 py-3">Acciones</th>
                       </tr>
                     </thead>
@@ -586,11 +585,6 @@ const Sucursales = () => {
                           <td className="px-4 py-3">
                             <span className={`badge ${getStatusBadgeClass(item.estado)}`}>
                               {item.estado}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="small text-muted">
-                              {formatDate(item.created_at)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -706,7 +700,7 @@ const Sucursales = () => {
                         </div>
                       )}
                       <div className="form-text">
-                        Mínimo 3 caracteres, máximo 100. Solo letras, números, espacios y guiones.
+                        Mínimo 3 caracteres, máximo 100. Solo letras, números, espacios, guiones y #.
                       </div>
                     </div>
                     <div className="col-md-6 mb-3">
