@@ -15,6 +15,8 @@ const Proveedores = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -75,7 +77,17 @@ const Proveedores = () => {
   );
 
   const handleGenerateReport = () => {
-    generateSupplierReport(filteredProveedores);
+    setShowReportModal(true);
+  };
+
+  const handleConfirmReport = async () => {
+    const proveedoresToReport = includeInactive
+      ? filteredProveedores
+      : filteredProveedores.filter(p => p.estado === 'Activo');
+
+    await generateSupplierReport(proveedoresToReport, {}, includeInactive);
+    setShowReportModal(false);
+    setIncludeInactive(false);
   };
 
   // Paginación
@@ -86,10 +98,28 @@ const Proveedores = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+
+    // Formatear teléfono automáticamente
+    if (name === 'telefono') {
+      // Remover todo excepto números
+      const numbersOnly = value.replace(/\D/g, '');
+
+      // Aplicar formato XXXX-XXXX
+      let formattedValue = numbersOnly;
+      if (numbersOnly.length > 4) {
+        formattedValue = numbersOnly.slice(0, 4) + '-' + numbersOnly.slice(4, 8);
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        [name]: formattedValue
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -168,6 +198,38 @@ const Proveedores = () => {
       } catch (error) {
         console.error('Error:', error);
       }
+    }
+  };
+
+  const handleToggleStatus = async (proveedor) => {
+    const newStatus = proveedor.estado === 'Activo' ? 'Inactivo' : 'Activo';
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/proveedores/${proveedor.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nombre: proveedor.nombre,
+          empresa: proveedor.empresa || '',
+          telefono: proveedor.telefono || '',
+          email: proveedor.email || '',
+          direccion: proveedor.direccion || '',
+          ciudad: proveedor.ciudad || '',
+          tipo_proveedor: proveedor.tipo_proveedor,
+          estado: newStatus,
+          producto_id: proveedor.producto_id || ''
+        }),
+      });
+
+      if (response.ok) {
+        await fetchProveedores();
+      } else {
+        console.error('Error al cambiar el estado del proveedor');
+      }
+    } catch (error) {
+      console.error('Error:', error);
     }
   };
 
@@ -404,12 +466,21 @@ const Proveedores = () => {
                               <button
                                 className="btn btn-sm btn-outline-primary"
                                 onClick={() => handleEdit(proveedor)}
+                                title="Editar"
                               >
                                 <i className="fas fa-edit"></i>
                               </button>
                               <button
+                                className={`btn btn-sm ${proveedor.estado === 'Activo' ? 'btn-outline-warning' : 'btn-outline-success'}`}
+                                onClick={() => handleToggleStatus(proveedor)}
+                                title={proveedor.estado === 'Activo' ? 'Desactivar' : 'Activar'}
+                              >
+                                <i className={`fas ${proveedor.estado === 'Activo' ? 'fa-pause' : 'fa-play'}`}></i>
+                              </button>
+                              <button
                                 className="btn btn-sm btn-outline-danger"
                                 onClick={() => handleDelete(proveedor.id)}
+                                title="Eliminar"
                               >
                                 <i className="fas fa-trash"></i>
                               </button>
@@ -514,6 +585,8 @@ const Proveedores = () => {
                         name="telefono"
                         value={formData.telefono}
                         onChange={handleInputChange}
+                        placeholder="XXXX-XXXX"
+                        maxLength="9"
                       />
                     </div>
                     <div className="col-md-6 mb-3">
@@ -607,6 +680,104 @@ const Proveedores = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para opciones de reporte */}
+      {showReportModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="fas fa-file-pdf text-danger me-2"></i>
+                  Generar Reporte de Proveedores
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setIncludeInactive(false);
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p className="text-muted mb-3">
+                  Seleccione las opciones para el reporte PDF:
+                </p>
+
+                <div className="alert alert-info border-0 mb-3">
+                  <i className="fas fa-info-circle me-2"></i>
+                  <strong>Total de proveedores a incluir:</strong>
+                  <span className="ms-2 badge bg-primary">
+                    {includeInactive
+                      ? filteredProveedores.length
+                      : filteredProveedores.filter(p => p.estado === 'Activo').length}
+                  </span>
+                </div>
+
+                <div className="form-check form-switch mb-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="includeInactiveProveedores"
+                    checked={includeInactive}
+                    onChange={(e) => setIncludeInactive(e.target.checked)}
+                  />
+                  <label className="form-check-label" htmlFor="includeInactiveProveedores">
+                    <strong>Incluir proveedores inactivos</strong>
+                    <br />
+                    <small className="text-muted">
+                      {includeInactive
+                        ? `Se incluirán ${filteredProveedores.filter(p => p.estado === 'Inactivo').length} proveedores inactivos`
+                        : 'Solo se incluirán proveedores activos en el reporte'}
+                    </small>
+                  </label>
+                </div>
+
+                {includeInactive && (
+                  <div className="alert alert-warning border-0">
+                    <i className="fas fa-exclamation-triangle me-2"></i>
+                    <small>
+                      Los proveedores inactivos se destacarán en <strong className="text-danger">rojo</strong> en el reporte.
+                    </small>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setIncludeInactive(false);
+                  }}
+                >
+                  <i className="fas fa-times me-1"></i>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary-green"
+                  onClick={handleConfirmReport}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-file-pdf me-1"></i>
+                      Generar PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

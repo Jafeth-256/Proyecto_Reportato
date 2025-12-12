@@ -75,10 +75,28 @@ const Clientes = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+
+    // Formatear teléfono automáticamente
+    if (name === 'telefono') {
+      // Remover todo excepto números
+      const numbersOnly = value.replace(/\D/g, '');
+
+      // Aplicar formato XXXX-XXXX
+      let formattedValue = numbersOnly;
+      if (numbersOnly.length > 4) {
+        formattedValue = numbersOnly.slice(0, 4) + '-' + numbersOnly.slice(4, 8);
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        [name]: formattedValue
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -153,6 +171,36 @@ const Clientes = () => {
       } catch (error) {
         console.error('Error:', error);
       }
+    }
+  };
+
+  const handleToggleStatus = async (cliente) => {
+    const newStatus = cliente.estado === 'Activo' ? 'Inactivo' : 'Activo';
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/clientes/${cliente.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nombre: cliente.nombre,
+          empresa: cliente.empresa || '',
+          telefono: cliente.telefono || '',
+          email: cliente.email || '',
+          direccion: cliente.direccion || '',
+          ciudad: cliente.ciudad || '',
+          estado: newStatus,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchClientes();
+      } else {
+        console.error('Error al cambiar el estado del cliente');
+      }
+    } catch (error) {
+      console.error('Error:', error);
     }
   };
 
@@ -339,6 +387,13 @@ const Clientes = () => {
                                   <i className="fas fa-edit"></i>
                                 </button>
                                 <button
+                                  className={`btn btn-sm ${cliente.estado === 'Activo' ? 'btn-outline-warning' : 'btn-outline-success'}`}
+                                  onClick={() => handleToggleStatus(cliente)}
+                                  title={cliente.estado === 'Activo' ? 'Desactivar' : 'Activar'}
+                                >
+                                  <i className={`fas ${cliente.estado === 'Activo' ? 'fa-pause' : 'fa-play'}`}></i>
+                                </button>
+                                <button
                                   className="btn btn-sm btn-outline-danger"
                                   onClick={() => handleDelete(cliente.id)}
                                   title="Eliminar"
@@ -457,6 +512,8 @@ const Clientes = () => {
                               name="telefono"
                               value={formData.telefono}
                               onChange={handleInputChange}
+                              placeholder="XXXX-XXXX"
+                              maxLength="9"
                             />
                           </div>
                           <div className="col-md-6 mb-3">

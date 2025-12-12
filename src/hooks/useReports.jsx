@@ -157,13 +157,13 @@ const useReports = () => {
     }
   };
 
-  const generateSupplierReport = async (suppliers, filters = {}) => {
+  const generateSupplierReport = async (suppliers, filters = {}, includeInactive = false) => {
     try {
       setIsGenerating(true);
       setError(null);
 
       const reportService = new ReportService();
-      reportService.generateSupplierReport(suppliers, filters);
+      reportService.generateSupplierReport(suppliers, filters, includeInactive);
       const filename = `reporte_proveedores_${new Date().toISOString().split('T')[0]}.pdf`;
       reportService.downloadPDF(filename);
       return { success: true, filename };
@@ -231,7 +231,26 @@ const generateClientReport = async (clients, filters = {}, includeInactive = fal
     setIsGenerating(false);
   }
 };
-  
+
+const generatePurchaseReport = async (compras, filters = {}) => {
+  try {
+    setIsGenerating(true);
+    setError(null);
+
+    const reportService = new ReportService();
+    reportService.generatePurchaseReport(compras, filters);
+    const filename = `reporte_compras_${new Date().toISOString().split('T')[0]}.pdf`;
+    reportService.downloadPDF(filename);
+    return { success: true, filename };
+  } catch (err) {
+    console.error('Error al generar reporte de compras:', err);
+    setError('Error al generar el reporte PDF de compras');
+    return { success: false, error: err.message };
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
 
   return {
     generateDailyReport,
@@ -244,6 +263,7 @@ const generateClientReport = async (clients, filters = {}, includeInactive = fal
     generateCuentasPorCobrarReport,
     generateComparativeReport,
     generateClientReport,
+    generatePurchaseReport,
     isGenerating,
     error,
     clearError: () => setError(null)

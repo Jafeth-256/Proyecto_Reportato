@@ -3,26 +3,22 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import '../styles/custom.css';
 import API_BASE_URL from '../config/api';
-import * as XLSX from 'xlsx';
+import useReports from '../hooks/useReports';
 
 const Compras = () => {
+    const { generatePurchaseReport, isGenerating } = useReports();
     const [compras, setCompras] = useState([]);
     const [productos, setProductos] = useState([]);
     const [proveedores, setProveedores] = useState([]);
     const [usuarios, setUsuarios] = useState([]);
     const [usuario, setUsuario] = useState(null);
     const [showModal, setShowModal] = useState(false);
-    const [showImportModal, setShowImportModal] = useState(false);
     const [editingCompra, setEditingCompra] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(5);
     const [loading, setLoading] = useState(true);
-    const [inventario, setInventario] = useState([]);
-    const [importingFile, setImportingFile] = useState(false);
-    const [importPreview, setImportPreview] = useState([]);
-    const [importErrors, setImportErrors] = useState([]);
-        
+
     const [formData, setFormData] = useState({
         proveedor: '',
         fecha: '',
@@ -38,7 +34,6 @@ const Compras = () => {
         fetchProveedores();
         fetchUsuarios();
         fetchUsuario();
-        cargarInventario();
     }, []);
 
     // Función para obtener lista de usuarios
@@ -51,19 +46,6 @@ const Compras = () => {
             }
         } catch (error) {
             console.error('Error al obtener usuarios:', error);
-        }
-    };
-
-    // Función para cargar inventario al iniciar
-    const cargarInventario = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/inventario`);
-            if (response.ok) {
-                const data = await response.json();
-                setInventario(data);
-            }
-        } catch (error) {
-            console.error('Error al cargar inventario:', error);
         }
     };
 
@@ -250,10 +232,6 @@ const Compras = () => {
 
             if (response.ok) {
                 console.log('Compra guardada exitosamente');
-
-                // Actualizar el inventario automáticamente
-                await actualizarInventario(submitData);
-
                 await fetchCompras();
                 resetForm();
             } else {
@@ -264,91 +242,6 @@ const Compras = () => {
         } catch (error) {
             console.error('Error de red:', error);
             alert('Error de conexión. Por favor intenta nuevamente.');
-        }
-    };
-
-    // Nueva función para actualizar o crear inventario
-    const actualizarInventario = async (compraData) => {
-        try {
-            const productoId = compraData.producto;
-            const cantidad = compraData.cantidad;
-            const precioUnitario = compraData.precio;
-
-            // Obtener inventario fresco desde la API
-            const inventarioResponse = await fetch(`${API_BASE_URL}/inventario`);
-            let inventarioFresco = [];
-            if (inventarioResponse.ok) {
-                inventarioFresco = await inventarioResponse.json();
-            }
-
-            // Buscar si ya existe el producto en el inventario
-            const inventarioExistente = inventarioFresco.find(item =>
-                item.producto_id == productoId || parseInt(item.producto_id) === parseInt(productoId)
-            );
-
-            if (inventarioExistente) {
-                // Si existe, sumar la cantidad
-                const nuevoStock = parseInt(inventarioExistente.stock_actual) + parseInt(cantidad);
-
-                const updateData = {
-                    stock_actual: nuevoStock,
-                    precio_unitario: precioUnitario,
-                    fecha_ingreso: inventarioExistente.fecha_ingreso
-                };
-
-                await fetch(
-                    `${API_BASE_URL}/inventario/${inventarioExistente.id}`,
-                    {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(updateData),
-                    }
-                );
-            } else {
-                // Si no existe, crear un nuevo registro de inventario
-                const nuevoInventario = {
-                    producto_id: productoId,
-                    stock_actual: cantidad,
-                    stock_minimo: 10,
-                    precio_unitario: precioUnitario,
-                    fecha_ingreso: new Date().toISOString().split('T')[0],
-                    fecha_vencimiento: '',
-                    estado: 'Disponible'
-                };
-
-                await fetch(
-                    `${API_BASE_URL}/inventario`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(nuevoInventario),
-                    }
-                );
-            }
-
-            // Recargar el inventario para mantener sincronizado
-            await fetchInventario();
-        } catch (error) {
-            console.error('Error al actualizar inventario:', error);
-        }
-    };
-
-    // Nueva función para obtener el inventario
-    const fetchInventario = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/inventario`);
-            if (response.ok) {
-                const data = await response.json();
-                // Actualizar el estado con los datos del inventario
-                setInventario(data);
-                return data;
-            }
-        } catch (error) {
-            console.error('Error al obtener inventario:', error);
         }
     };
 
@@ -396,120 +289,17 @@ const Compras = () => {
         }
     };
 
-    const closeImportModal = () => {
-        setShowImportModal(false);
-        setImportPreview([]);
-        setImportErrors([]);
-        const fileInput = document.getElementById('fileInputCompras');
-        if (fileInput) fileInput.value = '';
+    const handleGenerateReport = async () => {
+        // Enriquecer las compras con los nombres de proveedor y producto
+        const comprasConNombres = filteredCompras.map(compra => ({
+            ...compra,
+            proveedor_nombre: getProveedorNombre(compra.proveedor_id),
+            producto_nombre: getProductoNombre(compra.producto_id)
+        }));
+
+        await generatePurchaseReport(comprasConNombres, {});
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        try {
-            setImportingFile(true);
-            setImportErrors([]);
-            setImportPreview([]);
-            const reader = new FileReader();
-
-            reader.onload = async (event) => {
-                try {
-                    const data = event.target?.result;
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const worksheet = workbook.Sheets['compras'];
-
-                    if (!worksheet) {
-                        setImportErrors(['No se encontró la hoja "compras" en el archivo Excel']);
-                        setShowImportModal(true);
-                        setImportingFile(false);
-                        return;
-                    }
-
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-                    if (jsonData.length === 0) {
-                        setImportErrors(['El archivo no contiene datos']);
-                        setShowImportModal(true);
-                        setImportingFile(false);
-                        return;
-                    }
-
-                    setImportErrors([]);
-                    setImportPreview(jsonData);
-                    setShowImportModal(true);
-                    setImportingFile(false);
-                } catch (error) {
-                    console.error('Error al procesar archivo:', error);
-                    setImportErrors(['Error al procesar el archivo Excel. Asegúrate de que tiene el formato correcto']);
-                    setShowImportModal(true);
-                    setImportingFile(false);
-                }
-            };
-
-            reader.readAsArrayBuffer(file);
-        } catch (error) {
-            console.error('Error:', error);
-            setImportErrors(['Error al leer el archivo']);
-            setShowImportModal(true);
-            setImportingFile(false);
-        }
-    };
-
-    const handleConfirmImport = async () => {
-        try {
-            setImportingFile(true);
-            let comprasInsertadas = 0;
-            let comprasConError = 0;
-
-            for (const compra of importPreview) {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/compras`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            usuario: usuario?.id || 1,
-                            usuario_nombre: usuario?.nombre || 'Admin',
-                            proveedor: compra.proveedor,
-                            fecha: compra.fecha,
-                            producto: compra.producto,
-                            precio: parseFloat(compra.precio) || 0,
-                            cantidad: parseFloat(compra.cantidad) || 0,
-                            total: parseFloat(compra.total) || 0
-                        }),
-                    });
-
-                    if (response.ok) {
-                        comprasInsertadas++;
-                        // Actualizar inventario también
-                        await actualizarInventario({
-                            producto: compra.producto,
-                            cantidad: parseFloat(compra.cantidad) || 0,
-                            precio: parseFloat(compra.precio) || 0
-                        });
-                    } else {
-                        comprasConError++;
-                    }
-                } catch (error) {
-                    console.error('Error al insertar compra:', error);
-                    comprasConError++;
-                }
-            }
-
-            await fetchCompras();
-            setShowImportModal(false);
-            setImportPreview([]);
-            alert(`Importación completada!\n- Compras insertadas: ${comprasInsertadas}\n- Compras con error: ${comprasConError}`);
-        } catch (error) {
-            console.error('Error:', error);
-            setImportErrors(['Error al procesar la importación']);
-        } finally {
-            setImportingFile(false);
-        }
-    };
 
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleDateString('es-ES');
@@ -553,10 +343,10 @@ const Compras = () => {
                                     <div>
                                         <h3 className="fw-bold text-dark mb-1">
                                             <i className="fas fa-shopping-cart text-primary-purple me-2"></i>
-                                            Gestión de Compras
+                                            Registro de Compras
                                         </h3>
                                         <p className="text-muted mb-0">
-                                            Administra las compras a proveedores
+                                            Control de compras a proveedores
                                         </p>
                                         {usuario && (
                                             <small className="text-primary">
@@ -565,24 +355,29 @@ const Compras = () => {
                                         )}
                                     </div>
                                     <div className="d-flex gap-2">
-                                        <label className="btn btn-outline-primary-blue m-0">
-                                            <i className="fas fa-file-import me-1"></i>
-                                            Importar Excel
-                                            <input
-                                                id="fileInputCompras"
-                                                type="file"
-                                                accept=".xlsx,.xls"
-                                                onChange={handleFileUpload}
-                                                disabled={importingFile}
-                                                style={{ display: 'none' }}
-                                            />
-                                        </label>
+                                        <button
+                                            className="btn btn-outline-primary-green"
+                                            onClick={handleGenerateReport}
+                                            disabled={isGenerating || filteredCompras.length === 0}
+                                        >
+                                            {isGenerating ? (
+                                                <>
+                                                    <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                    Generando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <i className="fas fa-download me-1"></i>
+                                                    Exportar
+                                                </>
+                                            )}
+                                        </button>
                                         <button
                                             className="btn btn-primary-purple"
                                             onClick={() => setShowModal(true)}
                                         >
                                             <i className="fas fa-plus me-1"></i>
-                                            Nueva Compra
+                                            Registrar Compra
                                         </button>
                                     </div>
                                 </div>
@@ -802,7 +597,7 @@ const Compras = () => {
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">
-                                    {editingCompra ? 'Editar Compra' : 'Nueva Compra'}
+                                    {editingCompra ? 'Editar Compra' : 'Registrar Compra'}
                                 </h5>
                                 <button
                                     type="button"
@@ -920,111 +715,10 @@ const Compras = () => {
                                         type="submit"
                                         className="btn btn-primary-purple"
                                     >
-                                        {editingCompra ? 'Actualizar' : 'Crear'} Compra
+                                        {editingCompra ? 'Actualizar' : 'Registrar'} Compra
                                     </button>
                                 </div>
                             </form>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal para importar compras */}
-            {showImportModal && (
-                <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
-                    <div className="modal-dialog modal-lg">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">
-                                    <i className="fas fa-file-import me-2"></i>
-                                    Vista Previa de Importación de Compras
-                                </h5>
-                                <button
-                                    type="button"
-                                    className="btn-close"
-                                    onClick={closeImportModal}
-                                ></button>
-                            </div>
-                            <div className="modal-body">
-                                {importErrors.length > 0 && (
-                                    <div className="alert alert-danger mb-3">
-                                        <strong>Errores encontrados:</strong>
-                                        <ul className="mb-0 mt-2">
-                                            {importErrors.map((error, idx) => (
-                                                <li key={idx}>{error}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                                {importPreview.length > 0 && (
-                                    <>
-                                        <p className="text-muted mb-3">
-                                            Se encontraron <strong>{importPreview.length}</strong> compras para importar
-                                        </p>
-                                        <div className="table-responsive">
-                                            <table className="table table-sm table-hover">
-                                                <thead className="bg-light">
-                                                    <tr>
-                                                        <th>Proveedor ID</th>
-                                                        <th>Producto ID</th>
-                                                        <th>Fecha</th>
-                                                        <th>Precio</th>
-                                                        <th>Cantidad</th>
-                                                        <th>Total</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {importPreview.slice(0, 10).map((compra, idx) => (
-                                                        <tr key={idx}>
-                                                            <td>{compra.proveedor}</td>
-                                                            <td>{compra.producto}</td>
-                                                            <td>{compra.fecha}</td>
-                                                            <td>{formatCurrency(compra.precio || 0)}</td>
-                                                            <td>{compra.cantidad}</td>
-                                                            <td>{formatCurrency(compra.total || 0)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        {importPreview.length > 10 && (
-                                            <p className="text-muted text-center mt-2">
-                                                y {importPreview.length - 10} compras más...
-                                            </p>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={closeImportModal}
-                                    disabled={importingFile}
-                                >
-                                    Cancelar
-                                </button>
-                                {importPreview.length > 0 && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-success"
-                                        onClick={handleConfirmImport}
-                                        disabled={importingFile}
-                                    >
-                                        {importingFile ? (
-                                            <>
-                                                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                                Importando...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <i className="fas fa-check me-1"></i>
-                                                Confirmar Importación ({importPreview.length})
-                                            </>
-                                        )}
-                                    </button>
-                                )}
-                            </div>
                         </div>
                     </div>
                 </div>

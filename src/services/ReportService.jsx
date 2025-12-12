@@ -535,13 +535,24 @@ generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
       // Destacar estado
       if (data.section === 'body' && data.column.index === 7) {
         const estado = inventory[data.row.index].estado;
-        if (estado === 'Agotado') {
-          data.cell.styles.fillColor = [255, 235, 238];
-          data.cell.styles.textColor = [244, 67, 54];
+        const stockValue = inventory[data.row.index].stock_actual;
+
+        if (estado === 'Disponible' && stockValue > inventory[data.row.index].stock_minimo) {
+          data.cell.styles.fillColor = [232, 245, 233]; // Verde claro
+          data.cell.styles.textColor = [46, 125, 50]; // Verde
           data.cell.styles.fontStyle = 'bold';
-        } else if (estado === 'Stock Bajo') {
-          data.cell.styles.fillColor = [255, 243, 224];
-          data.cell.styles.textColor = [255, 152, 0];
+        } else if (estado === 'Agotado' || stockValue === 0) {
+          data.cell.styles.fillColor = [255, 235, 238]; // Rojo claro
+          data.cell.styles.textColor = [244, 67, 54]; // Rojo
+          data.cell.styles.fontStyle = 'bold';
+        } else if (estado === 'Stock Bajo' || stockValue <= inventory[data.row.index].stock_minimo) {
+          data.cell.styles.fillColor = [255, 243, 224]; // Naranja claro
+          data.cell.styles.textColor = [255, 152, 0]; // Naranja
+          data.cell.styles.fontStyle = 'bold';
+        } else {
+          // Otros estados (ej: "No disponible")
+          data.cell.styles.fillColor = [224, 224, 224]; // Gris claro
+          data.cell.styles.textColor = [97, 97, 97]; // Gris
           data.cell.styles.fontStyle = 'bold';
         }
       }
@@ -935,13 +946,14 @@ generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
     return this.doc;
   }
 
-  generateSupplierReport(suppliers, filters = {}) {
+  generateSupplierReport(suppliers, filters = {}, includeInactive = false) {
     this.initDocument();
 
-    // Header
-    this.addHeader('REPORTE DE PROVEEDORES', 'Listado de proveedores registrados', filters);
+    const subtitle = includeInactive
+      ? 'Listado completo de proveedores (incluyendo inactivos)'
+      : 'Listado de proveedores activos';
+    this.addHeader('REPORTE DE PROVEEDORES', subtitle, filters);
 
-    // Verify if there are suppliers
     if (!suppliers || suppliers.length === 0) {
       this.doc.setFontSize(12);
       this.doc.setTextColor(this.colors.secondary);
@@ -950,7 +962,51 @@ generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
       return this.doc;
     }
 
-    // Suppliers table
+    // Estadísticas
+    const totalProveedores = suppliers.length;
+    const proveedoresActivos = suppliers.filter(p => p.estado === 'Activo').length;
+    const proveedoresInactivos = suppliers.filter(p => p.estado === 'Inactivo').length;
+    const mayoristas = suppliers.filter(p => p.tipo_proveedor === 'Mayorista').length;
+
+    this.doc.setFontSize(12);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text('Resumen de Proveedores', 20, this.currentY);
+    this.currentY += 8;
+
+    const statsData = [
+      ['Concepto', 'Cantidad'],
+      ['Total de Proveedores', totalProveedores.toString()],
+      ['Proveedores Activos', proveedoresActivos.toString()],
+      ['Proveedores Inactivos', proveedoresInactivos.toString()],
+      ['Mayoristas', mayoristas.toString()]
+    ];
+
+    autoTable(this.doc, {
+      head: [statsData[0]],
+      body: statsData.slice(1),
+      startY: this.currentY,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [46, 125, 50],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [33, 37, 41]
+      },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { halign: 'center', fontStyle: 'bold' }
+      },
+      margin: { left: 20, right: 20 }
+    });
+
+    this.currentY = this.doc.lastAutoTable.finalY + 12;
+
+    // Tabla de proveedores
     this.doc.setFontSize(14);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setTextColor(this.colors.dark);
@@ -959,17 +1015,17 @@ generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
 
     const tableData = suppliers.map(s => [
       s.nombre,
-      s.empresa,
-      s.telefono,
-      s.email,
-      s.direccion,
-      s.ciudad,
+      s.empresa || 'N/A',
+      s.telefono || 'N/A',
+      s.email || 'N/A',
+      s.ciudad || 'N/A',
       s.tipo_proveedor,
+      s.nombre_producto || 'N/A',
       this.capitalizeFirst(s.estado)
     ]);
 
     autoTable(this.doc, {
-      head: [['Nombre', 'Empresa', 'Teléfono', 'Email', 'Dirección', 'Ciudad', 'Tipo', 'Estado']],
+      head: [['Nombre', 'Empresa', 'Teléfono', 'Email', 'Ciudad', 'Tipo', 'Producto', 'Estado']],
       body: tableData,
       startY: this.currentY,
       theme: 'striped',
@@ -992,10 +1048,134 @@ generateInventoryReport(inventory, filters = {}, includeZeroStock = false) {
         1: { cellWidth: 'auto' },
         2: { cellWidth: 'auto' },
         3: { cellWidth: 'wrap' },
-        4: { cellWidth: 'wrap' },
+        4: { cellWidth: 'auto' },
         5: { cellWidth: 'auto' },
         6: { cellWidth: 'auto' },
         7: { halign: 'center' }
+      },
+      margin: { left: 20, right: 20 },
+      alternateRowStyles: {
+        fillColor: [248, 249, 250]
+      },
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index === 7) {
+          const estado = suppliers[data.row.index].estado;
+          if (estado === 'Inactivo') {
+            data.cell.styles.fillColor = [255, 235, 238];
+            data.cell.styles.textColor = [244, 67, 54];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (estado === 'Activo') {
+            data.cell.styles.fillColor = [232, 245, 233];
+            data.cell.styles.textColor = [46, 125, 50];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    });
+
+    this.addFooter();
+    return this.doc;
+  }
+
+  generatePurchaseReport(compras, filters = {}) {
+    this.initDocument();
+
+    this.addHeader('REPORTE DE COMPRAS', 'Registro de compras a proveedores', filters);
+
+    if (!compras || compras.length === 0) {
+      this.doc.setFontSize(12);
+      this.doc.setTextColor(this.colors.secondary);
+      this.doc.text('No se encontraron registros de compras.', 20, this.currentY);
+      this.addFooter();
+      return this.doc;
+    }
+
+    // Estadísticas
+    const totalCompras = compras.length;
+    const totalInvertido = compras.reduce((sum, c) => sum + parseFloat(c.total || 0), 0);
+    const proveedoresUnicos = [...new Set(compras.map(c => c.proveedor_nombre || c.proveedor_id))].length;
+
+    this.doc.setFontSize(12);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text('Resumen de Compras', 20, this.currentY);
+    this.currentY += 8;
+
+    const statsData = [
+      ['Concepto', 'Valor'],
+      ['Total de Compras', totalCompras.toString()],
+      ['Total Invertido', this.formatCurrency(totalInvertido)],
+      ['Proveedores', proveedoresUnicos.toString()]
+    ];
+
+    autoTable(this.doc, {
+      head: [statsData[0]],
+      body: statsData.slice(1),
+      startY: this.currentY,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [46, 125, 50],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [33, 37, 41]
+      },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { halign: 'center', fontStyle: 'bold' }
+      },
+      margin: { left: 20, right: 20 }
+    });
+
+    this.currentY = this.doc.lastAutoTable.finalY + 12;
+
+    // Tabla de compras
+    this.doc.setFontSize(14);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setTextColor(this.colors.dark);
+    this.doc.text('Detalle de Compras', 20, this.currentY);
+    this.currentY += 8;
+
+    const tableData = compras.map(c => [
+      this.formatDate(c.fecha_realizada),
+      c.proveedor_nombre || c.proveedor_id || 'N/A',
+      c.producto_nombre || c.producto_id || 'N/A',
+      c.cantidad_producto || '0',
+      this.formatCurrency(c.precio_unitario || 0),
+      this.formatCurrency(c.total || 0),
+      c.usuario_nombre || 'N/A'
+    ]);
+
+    autoTable(this.doc, {
+      head: [['Fecha', 'Proveedor', 'Producto', 'Cantidad', 'Precio Unit.', 'Total', 'Usuario']],
+      body: tableData,
+      startY: this.currentY,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [46, 125, 50],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [33, 37, 41]
+      },
+      styles: {
+        overflow: 'linebreak',
+        cellPadding: 2
+      },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 'auto' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right', fontStyle: 'bold' },
+        6: { cellWidth: 'auto' }
       },
       margin: { left: 20, right: 20 },
       alternateRowStyles: {
