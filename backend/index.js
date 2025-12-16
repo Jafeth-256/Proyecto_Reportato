@@ -382,14 +382,153 @@ app.post('/recuperar-contrasena', async (req, res) => {
     );
 
     await transporter.sendMail({
-      from: 'tu-email@gmail.com',
+      from: 'abrizuela2004@gmail.com',
       to: correo,
-      subject: 'Recuperación de contraseña',
+      subject: 'Recuperación de Contraseña - Reportato',
       html: `
-        <h2>Recuperación de contraseña</h2>
-        <p>Hola ${usuario.nombre},</p>
-        <p>Tu nueva contraseña temporal es: <strong>${nuevaContrasena}</strong></p>
-        <p>Te recomendamos cambiarla después de iniciar sesión.</p>
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              background-color: #f5f5f5;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              background-color: #ffffff;
+            }
+            .header {
+              background: linear-gradient(135deg, #fd7e14 0%, #ffa94d 100%);
+              padding: 40px 20px;
+              text-align: center;
+            }
+            .logo-circle {
+              width: 80px;
+              height: 80px;
+              background: rgba(255, 255, 255, 0.2);
+              border-radius: 50%;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              margin-bottom: 20px;
+              backdrop-filter: blur(10px);
+            }
+            .header h1 {
+              color: #ffffff;
+              margin: 0;
+              font-size: 28px;
+              font-weight: bold;
+            }
+            .content {
+              padding: 40px 30px;
+              color: #333333;
+            }
+            .greeting {
+              font-size: 20px;
+              font-weight: 600;
+              color: #333333;
+              margin-bottom: 20px;
+            }
+            .message {
+              font-size: 16px;
+              line-height: 1.6;
+              color: #666666;
+              margin-bottom: 30px;
+            }
+            .password-box {
+              background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+              border-left: 4px solid #fd7e14;
+              padding: 20px;
+              border-radius: 8px;
+              margin: 30px 0;
+              text-align: center;
+            }
+            .password-label {
+              font-size: 14px;
+              color: #666666;
+              margin-bottom: 10px;
+              font-weight: 600;
+            }
+            .password-value {
+              font-size: 32px;
+              font-weight: bold;
+              color: #fd7e14;
+              letter-spacing: 2px;
+              font-family: 'Courier New', monospace;
+            }
+            .warning-box {
+              background-color: #fff3cd;
+              border-left: 4px solid #ffc107;
+              padding: 15px;
+              border-radius: 8px;
+              margin: 20px 0;
+            }
+            .warning-box p {
+              margin: 0;
+              font-size: 14px;
+              color: #856404;
+            }
+            .footer {
+              background-color: #f8f9fa;
+              padding: 30px;
+              text-align: center;
+              border-top: 1px solid #e9ecef;
+            }
+            .footer p {
+              margin: 5px 0;
+              font-size: 14px;
+              color: #6c757d;
+            }
+            .icon {
+              font-size: 40px;
+              color: #ffffff;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo-circle">
+                <span class="icon">🍃</span>
+              </div>
+              <h1>Recuperación de Contraseña</h1>
+            </div>
+
+            <div class="content">
+              <p class="greeting">¡Hola ${usuario.nombre}!</p>
+
+              <p class="message">
+                Hemos recibido una solicitud para recuperar tu contraseña. A continuación encontrarás tu nueva contraseña temporal:
+              </p>
+
+              <div class="password-box">
+                <div class="password-label">TU CONTRASEÑA TEMPORAL</div>
+                <div class="password-value">${nuevaContrasena}</div>
+              </div>
+
+              <div class="warning-box">
+                <p><strong>⚠️ Importante:</strong> Por tu seguridad, deberás cambiar esta contraseña temporal inmediatamente después de iniciar sesión.</p>
+              </div>
+
+              <p class="message">
+                Si no solicitaste este cambio, por favor contacta al administrador del sistema de inmediato.
+              </p>
+            </div>
+
+            <div class="footer">
+              <p><strong>Reportato - Sistema de Gestión</strong></p>
+              <p>Este es un correo automático, por favor no responder.</p>
+              <p style="color: #adb5bd; font-size: 12px; margin-top: 15px;">© 2024 Reportato. Todos los derechos reservados.</p>
+            </div>
+          </div>
+        </body>
+        </html>
       `
     });
 
